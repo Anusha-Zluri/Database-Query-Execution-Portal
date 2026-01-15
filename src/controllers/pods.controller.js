@@ -1,8 +1,11 @@
-// pods.controller.js
-exports.getPods = async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT id, name FROM pods WHERE is_active = true ORDER BY name`
-  );
+const podsDAL = require('../dal/pods.dal');
 
-  res.json(rows);
+exports.getPods = async (req, res) => {
+  try {
+    const pods = await podsDAL.getActivePods();
+    res.json(pods);
+  } catch (err) {
+    console.error('Get pods error:', err);
+    res.status(500).json({ message: 'Failed to fetch pods' });
+  }
 };

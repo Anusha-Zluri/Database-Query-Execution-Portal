@@ -1,33 +1,36 @@
-const { pool } = require('../config/db');
-const { Pool } = require('pg');
-const { MongoClient } = require('mongodb');
 const fs = require('fs/promises');
 const instanceRegistry = require('../registry/instances.registry');
+
+const executionDAL = require('../dal/execution.dal');
 
 const executePostgresScript = require('../execution/postgres/script.executor');
 const executeMongoScript = require('../execution/mongodb/script.executor');
 
+const { Pool } = require('pg');
+const { MongoClient } = require('mongodb');
 
-
-//dispatcher
+/* ============================================================
+   DISPATCH EXECUTION
+============================================================ */
 async function dispatchExecution(request, instance) {
-  switch (instance.engine) {
-    case 'postgres':
-      return request.request_type === 'QUERY'
-        ? executePostgresQuery(request, instance)
-        : executePostgresScript(request, instance);
-
-    case 'mongodb':
-      return request.request_type === 'QUERY'
-        ? executeMongoQuery(request, instance)
-        : executeMongoScript(request, instance);
-
-    default:
-      throw new Error(`Unsupported engine: ${instance.engine}`);
+  if (instance.engine === 'postgres') {
+    return request.request_type === 'QUERY'
+      ? executePostgresQuery(request, instance)
+      : executePostgresScript(request, instance);
   }
+
+  if (instance.engine === 'mongodb') {
+    return request.request_type === 'QUERY'
+      ? executeMongoQuery(request, instance)
+      : executeMongoScript(request, instance);
+  }
+
+  throw new Error(`Unsupported engine: ${instance.engine}`);
 }
 
-//query executor
+/* ============================================================
+   POSTGRES QUERY
+============================================================ */
 async function executePostgresQuery(request, instance) {
   const url = new URL(instance.baseUrl);
   url.pathname = `/${request.db_name}`;
@@ -38,178 +41,230 @@ async function executePostgresQuery(request, instance) {
 
   try {
     const result = await execPool.query(request.query_text);
-    return { rowCount: result.rowCount, rows: result.rows };
+    return {
+      rowCount: result.rowCount,
+      rows: result.rows
+    };
   } finally {
     await execPool.end();
   }
 }
 
-//mongodb query executor
+/* ============================================================
+   MONGO QUERY
+============================================================ */
 async function executeMongoQuery(request, instance) {
-  let payload;
-  try {
-    payload = JSON.parse(request.query_text);
-  } catch {
-    throw new Error('Mongo query must be valid JSON');
-  }
-
+  const payload = JSON.parse(request.query_text);
   const { collection, operation, args = {} } = payload;
-  if (!collection || !operation) {
-    throw new Error('Mongo query must include collection and operation');
-  }
 
-  const client = new MongoClient(instance.baseUrl, {
-    serverSelectionTimeoutMS: 5000
-  });
-
+  const client = new MongoClient(instance.baseUrl);
   await client.connect();
 
   try {
-    const db = client.db(request.db_name);
-    const col = db.collection(collection);
+    const col = client.db(request.db_name).collection(collection);
 
     if (operation === 'find') {
-      const cursor = col.find(args.filter || {});
-      if (args.limit) cursor.limit(Math.min(args.limit, 500));
-      const docs = await cursor.toArray();
-      return { rowCount: docs.length, rows: docs };
+      const docs = await col.find(args.filter || {}).toArray();
+      return {
+        rowCount: docs.length,
+        rows: docs
+      };
     }
 
-    if (typeof col[operation] !== 'function') {
-      throw new Error(`Unsupported Mongo operation: ${operation}`);
-    }
-
-    const result = await col[operation](...normalizeMongoArgs(operation, args));
-    return normalizeMongoResult(result);
-
+    const result = await col[operation](...Object.values(args));
+    return {
+      rowCount: result?.modifiedCount ?? 0,
+      rows: []
+    };
   } finally {
     await client.close();
   }
 }
 
-//mongo helpers
-function normalizeMongoArgs(operation, args) {
-  switch (operation) {
-    case 'insertOne': return [args.document];
-    case 'insertMany': return [args.documents];
-    case 'updateOne':
-    case 'updateMany': return [args.filter, args.update, args.options || {}];
-    case 'deleteOne':
-    case 'deleteMany': return [args.filter];
-    case 'aggregate': return [args.pipeline || []];
-    default: return Array.isArray(args) ? args : [args];
-  }
-}
-
-function normalizeMongoResult(result) {
-  if (result?.insertedCount !== undefined) return { rowCount: result.insertedCount, rows: [] };
-  if (result?.modifiedCount !== undefined) return { rowCount: result.modifiedCount, rows: [] };
-  if (result?.deletedCount !== undefined) return { rowCount: result.deletedCount, rows: [] };
-  return { rowCount: 0, rows: [], raw: result };
-}
-
-//controller
-exports.executeRequest = async (req, res) => {
-  const requestId = Number(req.params.id);
-  if (Number.isNaN(requestId)) {
-    return res.status(400).json({ message: 'Invalid request id' });
-  }
-//fetch
-  const { rows } = await pool.query(
-    `
-    SELECT
-      r.id,
-      r.status,
-      r.request_type,
-      r.db_instance,
-      r.db_name,
-      rq.query_text,
-      rs.file_path
-    FROM requests r
-    LEFT JOIN request_queries rq ON rq.request_id = r.id
-    LEFT JOIN request_scripts rs ON rs.request_id = r.id
-    WHERE r.id = $1
-    `,
-    [requestId]
-  );
-
-  if (!rows.length) {
-    return res.status(404).json({ message: 'Request not found' });
-  }
-
-  const request = rows[0];
-
-  if (request.status !== 'APPROVED') {
-    return res.status(400).json({ message: 'Request is not approved yet' });
-  }
-
-  //load script
-  if (request.request_type === 'SCRIPT') {
-    request.script_text = await fs.readFile(request.file_path, 'utf-8');
-  }
-
-  //resolve instance
-  const instance = instanceRegistry[request.db_instance];
-  if (!instance?.engine || !instance?.baseUrl) {
-    return res.status(500).json({ message: 'Invalid database instance config' });
-  }
-
- 
-  //log into executions table
-  const startTime = Date.now();
-  const execInsert = await pool.query(
-    `
-    INSERT INTO executions (request_id, status, started_at)
-    VALUES ($1, 'RUNNING', NOW())
-    RETURNING id
-    `,
-    [requestId]
-  );
-
-  const executionId = execInsert.rows[0].id;
+/* ============================================================
+   INTERNAL EXECUTION (ORCHESTRATION ONLY)
+============================================================ */
+async function executeRequestInternal(requestId) {
+  const client = await executionDAL.getClient();
+  let executionId = null;
+  let startTime;
 
   try {
-    //run
-    const result = await dispatchExecution(request, instance);
-    const durationMs = Date.now() - startTime;
+    /* ===============================
+       1️⃣ METADATA TRANSACTION
+    =============================== */
+    await executionDAL.beginTransaction(client);
 
-    await pool.query(
-      `
-      UPDATE executions
-      SET status = 'SUCCESS',
-          finished_at = NOW(),
-          duration_ms = $2,
-          result_json = $3
-      WHERE id = $1
-      `,
-      [executionId, durationMs, JSON.stringify(result)]
-    );
+    const request = await executionDAL.lockApprovedRequest(client, requestId);
+    if (!request) {
+      throw new Error('Approved request not found');
+    }
 
-    res.json({
-      status: 'SUCCESS',
-      execution_id: executionId,
-      ...result
-    });
+    if (request.request_type === 'QUERY') {
+      request.query_text = await executionDAL.loadQueryText(client, requestId);
+    } else {
+      const filePath = await executionDAL.loadScriptPath(client, requestId);
+      request.script_text = await fs.readFile(filePath, 'utf-8');
+    }
+
+    const instance = instanceRegistry[request.db_instance];
+    if (!instance) {
+      throw new Error('Invalid database instance');
+    }
+
+    executionId = await executionDAL.createExecution(client, requestId);
+    startTime = Date.now();
+
+    // 🔓 Make execution row durable
+    await executionDAL.commitTransaction(client);
+
+    /* ===============================
+       2️⃣ ACTUAL EXECUTION
+    =============================== */
+    try {
+      const result = await dispatchExecution(request, instance);
+
+      // Store result with file handling for very large results
+      const fs = require('fs').promises;
+      const path = require('path');
+      const RESULTS_DIR = path.join(__dirname, '../../uploads/results');
+      const MAX_ROWS_TOTAL = 10000; // Only truncate if more than 10k rows
+      const PREVIEW_ROWS = 100; // Preview size when truncated
+
+      const totalRows = result.rowCount || 0;
+      const allRows = result.rows || [];
+      
+      console.log(`[executeRequest] Execution ${executionId}: totalRows=${totalRows}`);
+      
+      const needsTruncation = totalRows > MAX_ROWS_TOTAL;
+      let resultFilePath = null;
+      let resultToStore = result;
+      let isTruncated = false;
+
+      if (needsTruncation) {
+        // Only truncate if we exceed the max limit
+        isTruncated = true;
+        console.log(`[executeRequest] Truncating execution ${executionId} (${totalRows} rows > ${MAX_ROWS_TOTAL})`);
+        
+        await fs.mkdir(RESULTS_DIR, { recursive: true });
+        
+        // Store first 10k rows in file
+        const rowsToStore = allRows.slice(0, MAX_ROWS_TOTAL);
+        resultFilePath = path.join(RESULTS_DIR, `${executionId}.json`);
+        await fs.writeFile(
+          resultFilePath,
+          JSON.stringify({
+            rowCount: totalRows,
+            rows: rowsToStore,
+            truncated: true,
+            truncatedAt: MAX_ROWS_TOTAL,
+            storedAt: new Date().toISOString()
+          }, null, 2)
+        );
+        
+        console.log(`[executeRequest] Wrote ${rowsToStore.length} rows to ${resultFilePath}`);
+
+        // Store only preview in database
+        resultToStore = {
+          rowCount: totalRows,
+          rows: allRows.slice(0, PREVIEW_ROWS),
+          preview: true,
+          truncated: true,
+          totalRowsInFile: MAX_ROWS_TOTAL
+        };
+      }
+
+      // Update execution
+      await executionDAL.pool.query(
+        `
+        UPDATE executions
+        SET status='SUCCESS',
+            finished_at=NOW(),
+            duration_ms=$2,
+            result_json=$3,
+            result_file_path=$4,
+            is_truncated=$5
+        WHERE id=$1
+        `,
+        [executionId, Date.now() - startTime, JSON.stringify(resultToStore), resultFilePath, isTruncated]
+      );
+      
+      console.log(`[executeRequest] Updated execution ${executionId}: isTruncated=${isTruncated}, resultFilePath=${resultFilePath}`);
+    } catch (execErr) {
+      await executionDAL.markExecutionFailure(
+        executionId,
+        Date.now() - startTime,
+        execErr.message
+      );
+    }
+
+    /* ===============================
+       3️⃣ ALWAYS MARK REQUEST EXECUTED
+    =============================== */
+    await executionDAL.markRequestExecuted(requestId);
 
   } catch (err) {
-    const durationMs = Date.now() - startTime;
-
-    await pool.query(
-      `
-      UPDATE executions
-      SET status = 'FAILED',
-          finished_at = NOW(),
-          duration_ms = $2,
-          error_message = $3
-      WHERE id = $1
-      `,
-      [executionId, durationMs, err.message]
-    );
-
-    res.status(400).json({
-      status: 'FAILED',
-      execution_id: executionId,
-      error: err.message
-    });
+    // Rollback only if execution row was never created
+    if (!executionId) {
+      await executionDAL.rollbackTransaction(client);
+    }
+    throw err;
+  } finally {
+    client.release();
   }
+}
+/* ============================================================
+   HTTP HANDLER (OPTIONAL / DEBUG)
+============================================================ */
+const executeRequest = async (req, res) => {
+  try {
+    await executeRequestInternal(Number(req.params.id));
+    res.json({ message: 'Execution triggered' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+/* ============================================================
+   DOWNLOAD FULL RESULTS
+============================================================ */
+const downloadExecutionResults = async (req, res) => {
+  try {
+    const executionId = Number(req.params.id);
+    
+    // Get execution record
+    const execution = await executionDAL.getExecutionById(executionId);
+    
+    if (!execution) {
+      return res.status(404).json({ error: 'Execution not found' });
+    }
+
+    // Check if user has access (must be requester or manager)
+    const hasAccess = await executionDAL.checkExecutionAccess(executionId, req.user.id);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // If result is in file, serve the file
+    if (execution.result_file_path) {
+      const fileContent = await fs.readFile(execution.result_file_path, 'utf-8');
+      const result = JSON.parse(fileContent);
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="execution-${executionId}-results.json"`);
+      return res.json(result);
+    }
+
+    // Otherwise, return result from database
+    res.json(execution.result_json);
+  } catch (err) {
+    console.error('Download results error:', err);
+    res.status(500).json({ error: 'Failed to download results' });
+  }
+};
+
+module.exports = {
+  executeRequest,
+  executeRequestInternal,
+  downloadExecutionResults
 };

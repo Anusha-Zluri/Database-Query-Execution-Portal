@@ -5,3 +5,4 @@ module.exports = (err, req, res, next) => {
     error: err.message || 'Something went wrong',
   });
 };
+

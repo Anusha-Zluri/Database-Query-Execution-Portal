@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const authMiddleware = require('../middlewares/auth.middleware');
+const podsController = require('../controllers/pods.controller');
 
-router.get('/', (req, res) => {
-  res.json({ message: 'pods list placeholder' });
-});
+router.get('/', authMiddleware, podsController.getPods);
 
 module.exports = router;

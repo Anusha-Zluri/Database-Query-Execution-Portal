@@ -1,10 +1,9 @@
-const { pool } = require('../config/db');
 const fs = require('fs/promises');
 const instanceRegistry = require('../registry/instances.registry');
+const requestsDAL = require('../dal/requests.dal');
 
-/**
- * Simple static risk analysis for scripts
- */
+/* ================= SCRIPT ANALYSIS ================= */
+
 function analyzeScript(content) {
   const upper = content.toUpperCase();
 
@@ -30,26 +29,56 @@ function analyzeScript(content) {
   };
 }
 
+/* ================= QUERY ANALYSIS ================= */
 
- //Submit QUERY or SCRIPT request
- 
+function analyzeQuery(content, engine) {
+  const upper = content.toUpperCase();
+  let dangerousPatterns = [];
+  let hasDangerousOps = false;
+
+  if (engine === 'postgres') {
+    dangerousPatterns = [
+      'DROP ',
+      'TRUNCATE ',
+      'DELETE ',
+      'ALTER ',
+      'CREATE ',
+      'GRANT ',
+      'REVOKE '
+    ];
+    hasDangerousOps = dangerousPatterns.some(p => upper.includes(p));
+  } else if (engine === 'mongodb') {
+    // For MongoDB, check JSON operations
+    try {
+      const parsed = JSON.parse(content);
+      const dangerousOps = ['drop', 'dropDatabase', 'deleteMany', 'deleteOne', 'remove', 'createCollection', 'createIndex'];
+      hasDangerousOps = dangerousOps.includes(parsed.operation);
+    } catch {
+      // If not valid JSON, mark as risky
+      hasDangerousOps = true;
+    }
+  }
+
+  return {
+    hasDangerousOps,
+    riskLevel: hasDangerousOps ? 'HIGH' : 'LOW'
+  };
+}
+
+/* ================= SUBMIT REQUEST ================= */
+
 exports.submitRequest = async (req, res) => {
   const userId = req.user.id;
-
   const {
     request_type,
     pod_id,
-    db_instance, // e.g. 'pg-local'
-    db_name,     // e.g. 'analytics_db'
+    db_instance,
+    db_name,
     content,
     comment
   } = req.body;
 
-  console.log('BODY:', req.body);
-  console.log('FILE:', req.file);
-
-  
-//basic validation
+  // basic validation
   if (!request_type || !pod_id || !db_instance || !db_name) {
     return res.status(400).json({ message: 'Missing required fields' });
   }
@@ -63,11 +92,10 @@ exports.submitRequest = async (req, res) => {
   }
 
   if (request_type === 'SCRIPT' && !req.file) {
-    return res.status(400).json({ message: 'Script file is required' });
+    return res.status(400).json({ message: 'Script file is required. Please upload a .js file.' });
   }
 
- 
-//instance validation
+  // instance validation
   const instance = instanceRegistry[db_instance];
   if (!instance) {
     return res.status(400).json({
@@ -75,77 +103,34 @@ exports.submitRequest = async (req, res) => {
     });
   }
 
-  const client = await pool.connect();
+  const client = await requestsDAL.getClient();
 
   try {
     await client.query('BEGIN');
 
-  
-    //insert into requests table
-    const requestResult = await client.query(
-      `
-      INSERT INTO requests (
-        requester_id,
-        pod_id,
-        db_instance,
-        db_name,
-        request_type,
-        comment,
-        status
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, 'PENDING')
-      RETURNING id
-      `,
-      [
-        userId,
-        pod_id,
-        db_instance,
-        db_name,
-        request_type,
-        comment
-      ]
-    );
-
-    const requestId = requestResult.rows[0].id;
-
-   
+    const requestId = await requestsDAL.insertRequest(client, {
+      requesterId: userId,
+      podId: pod_id,
+      dbInstance: db_instance,
+      dbName: db_name,
+      requestType: request_type,
+      comment
+    });
 
     if (request_type === 'QUERY') {
-      await client.query(
-        `
-        INSERT INTO request_queries (
-          request_id,
-          query_text,
-          detected_operation,
-          is_safe
-        )
-        VALUES ($1, $2, NULL, NULL)
-        `,
-        [requestId, content]
-      );
+      const analysis = analyzeQuery(content, instance.engine);
+      await requestsDAL.insertQueryRequest(client, requestId, content, analysis);
     } else {
       const scriptContent = await fs.readFile(req.file.path, 'utf-8');
       const analysis = analyzeScript(scriptContent);
 
-      await client.query(
-        `
-        INSERT INTO request_scripts (
-          request_id,
-          file_path,
-          line_count,
-          risk_level,
-          has_dangerous_apis
-        )
-        VALUES ($1, $2, $3, $4, $5)
-        `,
-        [
-          requestId,
-          req.file.path,
-          analysis.lineCount,
-          analysis.riskLevel,
-          analysis.hasDangerousApis
-        ]
-      );
+      await requestsDAL.insertScriptRequest(client, {
+        requestId,
+        filePath: req.file.path,
+        lineCount: analysis.lineCount,
+        riskLevel: analysis.riskLevel,
+        hasDangerousApis: analysis.hasDangerousApis
+      });
     }
 
     await client.query('COMMIT');
@@ -165,29 +150,16 @@ exports.submitRequest = async (req, res) => {
   }
 };
 
+/* ================= APPROVAL ================= */
 
-//approve request
 exports.approveRequest = async (req, res) => {
   const requestId = Number(req.params.id);
-
   if (Number.isNaN(requestId)) {
     return res.status(400).json({ message: 'Invalid request id' });
   }
 
-  const { rowCount } = await pool.query(
-    `
-    UPDATE requests r
-    SET status = 'APPROVED'
-    FROM pods p
-    WHERE r.id = $1
-      AND r.status = 'PENDING'
-      AND r.pod_id = p.id
-      AND p.manager_user_id = $2
-    `,
-    [requestId, req.user.id]
-  );
-
-  if (rowCount === 0) {
+  const ok = await requestsDAL.approveRequest(requestId, req.user.id);
+  if (!ok) {
     return res
       .status(404)
       .json({ message: 'Request not found or not authorized' });
@@ -196,28 +168,14 @@ exports.approveRequest = async (req, res) => {
   res.json({ message: 'Request approved' });
 };
 
-//reject request
 exports.rejectRequest = async (req, res) => {
   const requestId = Number(req.params.id);
-
   if (Number.isNaN(requestId)) {
     return res.status(400).json({ message: 'Invalid request id' });
   }
 
-  const { rowCount } = await pool.query(
-    `
-    UPDATE requests r
-    SET status = 'REJECTED'
-    FROM pods p
-    WHERE r.id = $1
-      AND r.status = 'PENDING'
-      AND r.pod_id = p.id
-      AND p.manager_user_id = $2
-    `,
-    [requestId, req.user.id]
-  );
-
-  if (rowCount === 0) {
+  const ok = await requestsDAL.rejectRequest(requestId, req.user.id);
+  if (!ok) {
     return res
       .status(404)
       .json({ message: 'Request not found or not authorized' });
@@ -226,31 +184,120 @@ exports.rejectRequest = async (req, res) => {
   res.json({ message: 'Request rejected' });
 };
 
-//show script content to manager for approval
+/* ================= SCRIPT REVIEW ================= */
+
 exports.getScriptForApproval = async (req, res) => {
   const requestId = Number(req.params.id);
-
   if (Number.isNaN(requestId)) {
     return res.status(400).json({ message: 'Invalid request id' });
   }
 
-  const { rows } = await pool.query(
-    `
-    SELECT rs.file_path
-    FROM request_scripts rs
-    JOIN requests r ON r.id = rs.request_id
-    JOIN pods p ON p.id = r.pod_id
-    WHERE rs.request_id = $1
-      AND p.manager_user_id = $2
-    `,
-    [requestId, req.user.id]
+  const filePath = await requestsDAL.getScriptPathForApproval(
+    requestId,
+    req.user.id
   );
 
-  if (!rows.length) {
+  if (!filePath) {
     return res.status(404).json({ message: 'Not authorized or not found' });
   }
 
-  const scriptContent = await fs.readFile(rows[0].file_path, 'utf-8');
-
+  const scriptContent = await fs.readFile(filePath, 'utf-8');
   res.type('text/plain').send(scriptContent);
+};
+
+/* ================= GET INSTANCES ================= */
+
+exports.getInstances = async (req, res) => {
+  const { type } = req.query;
+
+  try {
+    const instances = Object.entries(instanceRegistry).map(([name, config]) => ({
+      name,
+      engine: config.engine,
+      description: config.description || ''
+    }));
+
+    // Filter by type if provided
+    if (type) {
+      const filtered = instances.filter(inst => inst.engine === type);
+      return res.json({ instances: filtered });
+    }
+
+    res.json({ instances });
+  } catch (err) {
+    console.error('Get instances error:', err);
+    res.status(500).json({ message: 'Failed to fetch instances' });
+  }
+};
+
+/* ================= GET DATABASE TYPES ================= */
+
+exports.getDatabaseTypes = async (req, res) => {
+  try {
+    // Extract unique database types from registry
+    const types = [...new Set(
+      Object.values(instanceRegistry).map(inst => inst.engine)
+    )];
+
+    res.json({ types });
+  } catch (err) {
+    console.error('Get database types error:', err);
+    res.status(500).json({ message: 'Failed to fetch database types' });
+  }
+};
+
+/* ================= GET DATABASES FROM INSTANCE ================= */
+
+exports.getDatabases = async (req, res) => {
+  const { instance } = req.query;
+
+  if (!instance) {
+    return res.status(400).json({ message: 'Instance name is required' });
+  }
+
+  const instanceConfig = instanceRegistry[instance];
+  if (!instanceConfig) {
+    return res.status(404).json({ message: 'Instance not found' });
+  }
+
+  try {
+    let databases = [];
+
+    if (instanceConfig.engine === 'postgres') {
+      const { Client } = require('pg');
+      const client = new Client({
+        connectionString: instanceConfig.baseUrl
+      });
+
+      await client.connect();
+      const result = await client.query(
+        `SELECT datname FROM pg_database 
+         WHERE datistemplate = false 
+         AND datname NOT IN ('postgres', 'template0', 'template1', 'neon')
+         ORDER BY datname`
+      );
+      databases = result.rows.map(row => row.datname);
+      await client.end();
+
+    } else if (instanceConfig.engine === 'mongodb') {
+      const { MongoClient } = require('mongodb');
+      const client = new MongoClient(instanceConfig.baseUrl);
+
+      await client.connect();
+      const adminDb = client.db().admin();
+      const result = await adminDb.listDatabases();
+      databases = result.databases
+        .filter(db => !['admin', 'local', 'config'].includes(db.name))
+        .map(db => db.name);
+      await client.close();
+    }
+
+    res.json({ databases });
+  } catch (err) {
+    console.error('Get databases error:', err);
+    res.status(500).json({ 
+      message: 'Failed to fetch databases from instance',
+      error: err.message 
+    });
+  }
 };

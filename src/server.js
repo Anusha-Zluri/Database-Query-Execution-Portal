@@ -1,10 +1,12 @@
 require('dotenv').config();
-
+const cors = require("cors");
 const app = require('./app');
 const { testConnection } = require('./config/db');
 
 
 const PORT = process.env.PORT || 3000;
+
+
 
 const startServer = async () => {
   try {

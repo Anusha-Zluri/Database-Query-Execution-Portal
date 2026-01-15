@@ -22,4 +22,21 @@ router.post(
   submissionsController.cloneSubmission
 );
 
+router.get(
+  '/submissions/:id/edit',
+  authMiddleware,
+  submissionsController.getSubmissionForEdit
+);
+router.patch(
+  '/submissions/:id',
+  authMiddleware,
+  submissionsController.updateDraftSubmission
+);
+
+router.post(
+  '/submissions/:id/submit',
+  authMiddleware,
+  submissionsController.submitDraft
+);
+
 module.exports = router;

@@ -1,5 +1,3 @@
-const fs = require('fs/promises');
-const path = require('path');
 const { Pool } = require('pg');
 const runUserScript = require('../script/vm.runner');
 const utils = require('../script/utils');
@@ -12,9 +10,9 @@ module.exports = async function executePostgresScript(request, instance) {
     connectionString: url.toString()
   });
 
-  // Read script from file
-  const scriptPath = path.resolve(request.file_path);
-  const scriptCode = await fs.readFile(scriptPath, 'utf-8');
+  if (!request.script_text) {
+    throw new Error('Script code missing for execution');
+  }
 
   const db = {
     query: async (text, params) => {
@@ -28,7 +26,7 @@ module.exports = async function executePostgresScript(request, instance) {
 
   try {
     return await runUserScript({
-      scriptCode,
+      scriptCode: request.script_text,
       context: {
         db,
         utils

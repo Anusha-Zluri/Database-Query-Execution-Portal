@@ -1,89 +1,50 @@
-const { pool } = require('../config/db');
+const submissionsDAL = require('../dal/submissions.dal');
 
-//my submission dashboard
+/* ================= DASHBOARD ================= */
+
 exports.getMySubmissions = async (req, res) => {
-  const userId = req.user.id;
-
-  const { rows } = await pool.query(
-    `
-    SELECT
-      r.id,
-      r.db_instance,
-      r.db_name,
-      r.request_type,
-      r.status,
-      r.created_at,
-
-      rq.query_text,
-      rs.file_path,
-
-      e.status      AS execution_status,
-      e.finished_at AS executed_at
-
-    FROM requests r
-    LEFT JOIN request_queries rq ON rq.request_id = r.id
-    LEFT JOIN request_scripts rs ON rs.request_id = r.id
-
-    LEFT JOIN LATERAL (
-      SELECT status, finished_at
-      FROM executions
-      WHERE request_id = r.id
-      ORDER BY started_at DESC
-      LIMIT 1
-    ) e ON true
-
-    WHERE r.requester_id = $1
-    ORDER BY r.created_at DESC
-    `,
-    [userId]
-  );
-
+  const rows = await submissionsDAL.getMySubmissions(req.user.id);
   res.json(rows);
 };
 
-//get submission details
+/* ================= DETAILS ================= */
+
 exports.getSubmissionDetails = async (req, res) => {
   const submissionId = Number(req.params.id);
-  const userId = req.user.id;
 
-  const { rows } = await pool.query(
-    `
-    SELECT
-      r.*,
-
-      rq.query_text,
-      rs.file_path,
-
-      e.status        AS exec_status,
-      e.started_at,
-      e.finished_at,
-      e.duration_ms,
-      e.result_json,
-      e.error_message
-
-    FROM requests r
-    LEFT JOIN request_queries rq ON rq.request_id = r.id
-    LEFT JOIN request_scripts rs ON rs.request_id = r.id
-
-    LEFT JOIN LATERAL (
-      SELECT *
-      FROM executions
-      WHERE request_id = r.id
-      ORDER BY started_at DESC
-      LIMIT 1
-    ) e ON true
-
-    WHERE r.id = $1
-      AND r.requester_id = $2
-    `,
-    [submissionId, userId]
+  const row = await submissionsDAL.getSubmissionDetails(
+    submissionId,
+    req.user.id
   );
 
-  if (!rows.length) {
+  if (!row) {
     return res.status(404).json({ message: 'Submission not found' });
   }
 
-  const row = rows[0];
+  console.log('Row from DB:', {
+    id: row.id,
+    request_type: row.request_type,
+    query_text: row.query_text,
+    file_path: row.file_path
+  });
+
+  // For scripts, read the file content
+  let content = row.query_text || '';
+  if (row.request_type === 'SCRIPT' && row.file_path) {
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const fullPath = path.resolve(row.file_path);
+      console.log('Reading script from:', fullPath);
+      content = await fs.readFile(fullPath, 'utf-8');
+      console.log('Script content length:', content.length);
+    } catch (err) {
+      console.error('Failed to read script file:', err);
+      content = `[Error reading script file: ${row.file_path}]`;
+    }
+  }
+
+  console.log('Final content length:', content.length);
 
   res.json({
     id: row.id,
@@ -94,84 +55,47 @@ exports.getSubmissionDetails = async (req, res) => {
     comment: row.comment,
     createdAt: row.created_at,
 
-    content: row.query_text || row.file_path,
+    content: content,
 
     execution: row.exec_status
       ? {
+          id: row.exec_id,
           status: row.exec_status,
           startedAt: row.started_at,
           finishedAt: row.finished_at,
           durationMs: row.duration_ms,
           result: row.result_json,
-          error: row.error_message
+          error: row.error_message,
+          isTruncated: row.is_truncated,
+          hasFullResultFile: !!row.result_file_path
         }
       : null
   });
 };
 
-//clone a submission
-exports.cloneSubmission = async (req, res) => {
-  const userId = req.user.id;
-  const sourceId = Number(req.params.id);
+/* ================= CLONE ================= */
 
-  const client = await pool.connect();
+exports.cloneSubmission = async (req, res) => {
+  const sourceId = Number(req.params.id);
+  const userId = req.user.id;
+
+  const client = await submissionsDAL.getClient();
 
   try {
     await client.query('BEGIN');
 
-    const { rows } = await client.query(
-      `
-      INSERT INTO requests (
-        requester_id,
-        pod_id,
-        request_type,
-        db_instance,
-        db_name,
-        status,
-        comment
-      )
-      SELECT
-        requester_id,
-        pod_id,
-        request_type,
-        db_instance,
-        db_name,
-        'PENDING',
-        comment
-      FROM requests
-      WHERE id = $1 AND requester_id = $2
-      RETURNING id
-      `,
-      [sourceId, userId]
+    const newRequestId = await submissionsDAL.cloneSubmission(
+      client,
+      sourceId,
+      userId
     );
 
-    if (!rows.length) {
+    if (!newRequestId) {
       throw new Error('Submission not found');
     }
 
-    const newRequestId = rows[0].id;
-
-    // Clone query (if exists)
-    await client.query(
-      `
-      INSERT INTO request_queries (request_id, query_text)
-      SELECT $2, query_text
-      FROM request_queries
-      WHERE request_id = $1
-      `,
-      [sourceId, newRequestId]
-    );
-
-    // Clone script (if exists)
-    await client.query(
-      `
-      INSERT INTO request_scripts (request_id, file_path, checksum)
-      SELECT $2, file_path, checksum
-      FROM request_scripts
-      WHERE request_id = $1
-      `,
-      [sourceId, newRequestId]
-    );
+    await submissionsDAL.cloneQuery(client, sourceId, newRequestId);
+    await submissionsDAL.cloneScript(client, sourceId, newRequestId);
 
     await client.query('COMMIT');
 
@@ -183,4 +107,78 @@ exports.cloneSubmission = async (req, res) => {
   } finally {
     client.release();
   }
+};
+
+/* ================= DRAFT ================= */
+
+exports.getSubmissionForEdit = async (req, res) => {
+  const submissionId = Number(req.params.id);
+
+  const row = await submissionsDAL.getDraftForEdit(
+    submissionId,
+    req.user.id
+  );
+
+  if (!row) {
+    return res.status(404).json({ message: 'Draft not found' });
+  }
+
+  res.json(row);
+};
+
+exports.updateDraftSubmission = async (req, res) => {
+  const submissionId = Number(req.params.id);
+  const userId = req.user.id;
+
+  const {
+    pod_id,
+    db_instance,
+    db_name,
+    comment,
+    content
+  } = req.body;
+
+  const client = await submissionsDAL.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    const ok = await submissionsDAL.updateDraft(client, {
+      submissionId,
+      userId,
+      podId: pod_id,
+      dbInstance: db_instance,
+      dbName: db_name,
+      comment,
+      content
+    });
+
+    if (!ok) {
+      throw new Error('Draft not found or locked');
+    }
+
+    await client.query('COMMIT');
+    res.json({ message: 'Draft updated' });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+exports.submitDraft = async (req, res) => {
+  const submissionId = Number(req.params.id);
+
+  const ok = await submissionsDAL.submitDraft(
+    submissionId,
+    req.user.id
+  );
+
+  if (!ok) {
+    return res.status(400).json({ message: 'Draft cannot be submitted' });
+  }
+
+  res.json({ message: 'Submitted for approval' });
 };

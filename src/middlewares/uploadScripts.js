@@ -14,21 +14,31 @@ const uploadScript = multer({
   storage,
   limits: {
     
-    // file size 500KB supports large enterprise scripts
+    // file size 16MB supports large enterprise scripts
     
-    fileSize: 500 * 1024
+    fileSize: 16 * 1024 * 1024
   },
   fileFilter(req, file, cb) {
     const ext = path.extname(file.originalname).toLowerCase();
     const mime = file.mimetype;
 
-    // Double validation (extension + MIME)
-    if (
-      ext !== '.js' ||
-      mime !== 'application/javascript'
-    ) {
+    // Accept .js extension with various MIME types
+    const validMimeTypes = [
+      'application/javascript',
+      'text/javascript',
+      'application/x-javascript',
+      'application/octet-stream'
+    ];
+
+    if (ext !== '.js') {
       return cb(
         new Error('Only JavaScript (.js) files allowed')
+      );
+    }
+
+    if (!validMimeTypes.includes(mime)) {
+      return cb(
+        new Error('Invalid file type. Only JavaScript files allowed.')
       );
     }
 

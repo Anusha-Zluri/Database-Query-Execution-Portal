@@ -27,7 +27,7 @@ module.exports = async function runUserScript({
   });
 
   if (typeof exportedFn !== 'function') {
-    throw new Error('Script must export a function');
+    throw new Error('Script must export a function'); 
   }
 
   const result = await exportedFn(context);
