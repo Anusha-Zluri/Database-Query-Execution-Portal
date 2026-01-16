@@ -163,7 +163,9 @@ export default function ApprovalDashboard() {
         });
       } catch (err) {
         console.error("Failed to load script:", err);
-        setError(err.response?.data?.message || "Failed to load script content");
+        const errorMsg = err.response?.data?.message || "Failed to load script content";
+        setError(errorMsg);
+        toast.error(errorMsg);
       }
     } else {
       // For queries, content is already available
