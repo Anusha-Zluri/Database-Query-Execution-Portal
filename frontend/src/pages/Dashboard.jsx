@@ -9,16 +9,26 @@ import MySubmissions from "../components/MySubmissions";
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("submit");
   const [userEmail, setUserEmail] = useState("");
+  const [userName, setUserName] = useState("");
   const [userRole, setUserRole] = useState(null);
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const logout = useAuthStore((s) => s.logout);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
   useEffect(() => {
+    // If no token, redirect to login
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
     // Try to get user from store first
     if (user?.email) {
       setUserEmail(user.email);
+      setUserName(user.name || "");
       setUserRole(user.role);
     } else {
       // If not in store, fetch from API
@@ -26,6 +36,7 @@ export default function Dashboard() {
         try {
           const userData = await getMe();
           setUserEmail(userData.email);
+          setUserName(userData.name || "");
           setUserRole(userData.role);
         } catch (error) {
           console.error("Failed to fetch user:", error);
@@ -35,7 +46,7 @@ export default function Dashboard() {
       };
       fetchUser();
     }
-  }, [user, navigate]);
+  }, [user, token, navigate]);
 
   const [clonedDraftId, setClonedDraftId] = useState(null);
 
@@ -126,20 +137,6 @@ export default function Dashboard() {
             </button>
           )}
         </nav>
-
-        {/* User section */}
-        <div className="p-4 border-t border-slate-800">
-          <button
-            onClick={handleLogout}
-            className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-all`}
-            title={sidebarCollapsed ? "Logout" : ""}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 flex-shrink-0">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-            </svg>
-            {!sidebarCollapsed && <span className="font-medium">Logout</span>}
-          </button>
-        </div>
       </aside>
 
       {/* Main Content */}
@@ -171,16 +168,63 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm">
+          <div className="relative">
+            <button
+              onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+              className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all"
+            >
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#1a9d7c] to-[#14b8a6] flex items-center justify-center text-white font-semibold">
-                {userEmail ? userEmail.charAt(0).toUpperCase() : "U"}
+                {userName ? userName.charAt(0).toUpperCase() : (userEmail ? userEmail.charAt(0).toUpperCase() : "U")}
               </div>
               <div className="text-left">
                 <p className="text-xs text-slate-500">Logged in as</p>
-                <p className="text-sm font-medium text-slate-900">{userEmail || "Loading..."}</p>
+                <p className="text-sm font-medium text-slate-900">{userName || userEmail || "Loading..."}</p>
               </div>
-            </div>
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                strokeWidth={2} 
+                stroke="currentColor" 
+                className={`w-4 h-4 text-slate-400 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+
+            {/* Dropdown Menu */}
+            {userDropdownOpen && (
+              <>
+                {/* Backdrop to close dropdown */}
+                <div 
+                  className="fixed inset-0 z-10" 
+                  onClick={() => setUserDropdownOpen(false)}
+                />
+                
+                {/* Dropdown */}
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-slate-200 py-2 z-20">
+                  <div className="px-4 py-3 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{userName || "User"}</p>
+                    <p className="text-xs text-slate-500 truncate mt-0.5">{userEmail}</p>
+                    {userRole && (
+                      <span className="inline-block mt-2 px-2 py-0.5 text-xs font-medium text-teal-700 bg-teal-50 rounded-full capitalize">
+                        {userRole}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-slate-400">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                    </svg>
+                    <span className="font-medium">Logout</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </header>
 

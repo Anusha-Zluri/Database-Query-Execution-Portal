@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 import { getPendingApprovals, approveRequest, rejectRequest } from "../api/approvals.api";
 import { getPods } from "../api/pods.api";
 import axios from "../utils/axios";
@@ -82,7 +83,12 @@ export default function ApprovalDashboard() {
       setTotal(data.total || 0);
     } catch (err) {
       console.error("Failed to fetch approvals:", err);
-      setError("Failed to load approvals. Please try again.");
+      // Show specific error message from backend (403, 404, etc.)
+      setError(err.response?.data?.message || "Failed to load approvals. Please try again.");
+      // Clear approvals on error
+      setApprovals([]);
+      setTotalPages(1);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -93,10 +99,13 @@ export default function ApprovalDashboard() {
     setError("");
     try {
       await approveRequest(requestId);
+      toast.success("Request approved successfully!");
       // Refresh the list
       fetchApprovals();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to approve request");
+      const errorMsg = err.response?.data?.message || "Failed to approve request";
+      toast.error(errorMsg);
+      setError(errorMsg);
     } finally {
       setApproving(null);
     }
@@ -109,19 +118,23 @@ export default function ApprovalDashboard() {
 
   const confirmReject = async () => {
     if (!rejectReason.trim()) {
+      toast.error("Please provide a reason for rejection");
       setError("Please provide a reason for rejection");
       return;
     }
 
     try {
       await rejectRequest(rejectModal.requestId, rejectReason);
+      toast.success("Request rejected successfully!");
       setRejectModal({ open: false, requestId: null });
       setRejectReason("");
       setError(""); // Clear any previous errors
       // Refresh the list
       fetchApprovals();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to reject request");
+      const errorMsg = err.response?.data?.message || "Failed to reject request";
+      toast.error(errorMsg);
+      setError(errorMsg);
     }
   };
 
@@ -475,13 +488,13 @@ export default function ApprovalDashboard() {
         {/* Empty State */}
         {!loading && filteredApprovals.length === 0 && (
           <div className="text-center py-12">
-            {podFilter && total === 0 ? (
+            {error ? (
               <>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-red-400 mx-auto mb-3">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
                 <p className="text-red-600 text-sm font-medium">
-                  You can only approve requests from PODs you manage. This POD is not assigned to you.
+                  {error}
                 </p>
                 <button
                   onClick={() => setPodFilter("")}

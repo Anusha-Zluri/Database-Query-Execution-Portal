@@ -195,9 +195,33 @@ async function rejectRequest(requestId, managerId, reason) {
   return rowCount > 0;
 }
 
+async function getRequestDetailsForRejection(requestId) {
+  const { rows } = await pool.query(
+    `
+    SELECT 
+      r.id,
+      r.request_type,
+      r.db_instance,
+      r.db_name,
+      u.email as requester_email,
+      rq.query_text,
+      rs.file_path
+    FROM requests r
+    JOIN users u ON r.requester_id = u.id
+    LEFT JOIN request_queries rq ON rq.request_id = r.id
+    LEFT JOIN request_scripts rs ON rs.request_id = r.id
+    WHERE r.id = $1
+    `,
+    [requestId]
+  );
+
+  return rows[0] || null;
+}
+
 module.exports = {
   getPendingApprovals,
   getScriptPathForApproval,
   approveRequest,
-  rejectRequest
+  rejectRequest,
+  getRequestDetailsForRejection
 };

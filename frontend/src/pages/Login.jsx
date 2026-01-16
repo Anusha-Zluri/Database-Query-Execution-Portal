@@ -1,8 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/auth.store";
-
-
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -13,6 +11,12 @@ export default function Login() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
+  const logout = useAuthStore((s) => s.logout);
+
+  // Clear auth state when login page loads (for user switching)
+  useEffect(() => {
+    logout();
+  }, [logout]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

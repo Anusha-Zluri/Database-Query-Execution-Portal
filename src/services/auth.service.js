@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 
 const loginUser = async (email, password) => {
   const result = await pool.query(
-    'SELECT id, email, password_hash, role FROM users WHERE email = $1',
+    'SELECT id, name, email, password_hash, role FROM users WHERE email = $1',
     [email]
   );
 
@@ -20,6 +20,7 @@ const loginUser = async (email, password) => {
 
   return {
     id: user.id,
+    name: user.name,
     email: user.email,
     role: user.role,
   };

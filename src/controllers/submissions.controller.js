@@ -3,8 +3,21 @@ const submissionsDAL = require('../dal/submissions.dal');
 /* ================= DASHBOARD ================= */
 
 exports.getMySubmissions = async (req, res) => {
-  const rows = await submissionsDAL.getMySubmissions(req.user.id);
-  res.json(rows);
+  const filters = {
+    page: req.query.page,
+    limit: req.query.limit,
+    status: req.query.status
+  };
+  
+  const result = await submissionsDAL.getMySubmissions(req.user.id, filters);
+  res.json(result);
+};
+
+/* ================= STATUS COUNTS ================= */
+
+exports.getSubmissionStatusCounts = async (req, res) => {
+  const counts = await submissionsDAL.getSubmissionStatusCounts(req.user.id);
+  res.json(counts);
 };
 
 /* ================= DETAILS ================= */
@@ -25,12 +38,17 @@ exports.getSubmissionDetails = async (req, res) => {
     id: row.id,
     request_type: row.request_type,
     query_text: row.query_text,
-    file_path: row.file_path
+    file_path: row.file_path,
+    status: row.status,
+    rejection_reason: row.rejection_reason
   });
 
-  // For scripts, read the file content
-  let content = row.query_text || '';
-  if (row.request_type === 'SCRIPT' && row.file_path) {
+  // For rejected requests, don't show the original content - focus on rejection reason
+  let content = '';
+  if (row.status === 'REJECTED') {
+    content = null; // Don't show content for rejected requests
+  } else if (row.request_type === 'SCRIPT' && row.file_path) {
+    // Only read script file for non-rejected requests
     try {
       const fs = require('fs').promises;
       const path = require('path');
@@ -42,9 +60,12 @@ exports.getSubmissionDetails = async (req, res) => {
       console.error('Failed to read script file:', err);
       content = `[Error reading script file: ${row.file_path}]`;
     }
+  } else {
+    // For queries or other types
+    content = row.query_text || '';
   }
 
-  console.log('Final content length:', content.length);
+  console.log('Final content length:', content ? content.length : 'null');
 
   res.json({
     id: row.id,
@@ -54,6 +75,7 @@ exports.getSubmissionDetails = async (req, res) => {
     status: row.status,
     comment: row.comment,
     createdAt: row.created_at,
+    rejectionReason: row.rejection_reason,
 
     content: content,
 
@@ -82,7 +104,7 @@ exports.cloneSubmission = async (req, res) => {
   const client = await submissionsDAL.getClient();
 
   try {
-    await client.query('BEGIN');
+    await submissionsDAL.beginTransaction(client);
 
     const newRequestId = await submissionsDAL.cloneSubmission(
       client,
@@ -97,15 +119,13 @@ exports.cloneSubmission = async (req, res) => {
     await submissionsDAL.cloneQuery(client, sourceId, newRequestId);
     await submissionsDAL.cloneScript(client, sourceId, newRequestId);
 
-    await client.query('COMMIT');
+    await submissionsDAL.commitTransaction(client);
 
     res.status(201).json({ id: newRequestId });
 
   } catch (err) {
-    await client.query('ROLLBACK');
-    res.status(400).json({ error: err.message });
-  } finally {
-    client.release();
+    await submissionsDAL.rollbackTransaction(client);
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -162,7 +182,7 @@ exports.updateDraftSubmission = async (req, res) => {
 
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
@@ -177,7 +197,7 @@ exports.submitDraft = async (req, res) => {
   );
 
   if (!ok) {
-    return res.status(400).json({ message: 'Draft cannot be submitted' });
+    return res.status(404).json({ message: 'Draft cannot be submitted' });
   }
 
   res.json({ message: 'Submitted for approval' });

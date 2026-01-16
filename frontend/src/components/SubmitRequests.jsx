@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 import { getDatabaseTypes, getInstances, getDatabases, submitRequest } from "../api/requests.api";
 import { getPods } from "../api/pods.api";
 import { getSubmissionForEdit } from "../api/submissions.api";
@@ -231,7 +232,8 @@ export default function SubmitRequests({ draftId, onDraftLoaded }) {
 
       const data = await submitRequest(formDataToSend);
 
-      setSuccess(data.message || "Request submitted successfully!");
+      toast.success("Request submitted successfully!");
+      
       // Reset form
       setFormData({
         db_instance: "",
@@ -253,6 +255,7 @@ export default function SubmitRequests({ draftId, onDraftLoaded }) {
     } catch (err) {
       // Handle different error types
       const errorMessage = err.response?.data?.message || err.message || "Failed to submit request";
+      toast.error(errorMessage);
       setError(errorMessage);
     } finally {
       setLoading(false);

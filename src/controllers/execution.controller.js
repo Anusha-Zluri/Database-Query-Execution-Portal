@@ -9,6 +9,10 @@ const executeMongoScript = require('../execution/mongodb/script.executor');
 const { Pool } = require('pg');
 const { MongoClient } = require('mongodb');
 
+// Slack integration
+const slackService = require('../services/slack.service');
+const { approvalSuccessMessage, approvalFailureMessage } = require('../services/slack.messages');
+
 /* ============================================================
    DISPATCH EXECUTION
 ============================================================ */
@@ -175,27 +179,31 @@ async function executeRequestInternal(requestId) {
       }
 
       // Update execution
-      await executionDAL.pool.query(
-        `
-        UPDATE executions
-        SET status='SUCCESS',
-            finished_at=NOW(),
-            duration_ms=$2,
-            result_json=$3,
-            result_file_path=$4,
-            is_truncated=$5
-        WHERE id=$1
-        `,
-        [executionId, Date.now() - startTime, JSON.stringify(resultToStore), resultFilePath, isTruncated]
+      await executionDAL.updateExecutionWithFile(
+        executionId,
+        Date.now() - startTime,
+        resultToStore,
+        resultFilePath,
+        isTruncated
       );
       
       console.log(`[executeRequest] Updated execution ${executionId}: isTruncated=${isTruncated}, resultFilePath=${resultFilePath}`);
+      
+      // Send success notification (non-blocking)
+      sendExecutionSuccessNotification(requestId, Date.now() - startTime, result)
+        .catch(err => console.error('Failed to send success notification:', err.message));
+        
     } catch (execErr) {
       await executionDAL.markExecutionFailure(
         executionId,
         Date.now() - startTime,
-        execErr.message
+        execErr.message,
+        execErr.stack || null
       );
+      
+      // Send failure notification (non-blocking)
+      sendExecutionFailureNotification(requestId, Date.now() - startTime, execErr.message, execErr.stack || null)
+        .catch(err => console.error('Failed to send failure notification:', err.message));
     }
 
     /* ===============================
@@ -221,7 +229,7 @@ const executeRequest = async (req, res) => {
     await executeRequestInternal(Number(req.params.id));
     res.json({ message: 'Execution triggered' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -268,3 +276,79 @@ module.exports = {
   executeRequestInternal,
   downloadExecutionResults
 };
+
+/* ================= SLACK NOTIFICATION HELPERS ================= */
+
+async function sendExecutionSuccessNotification(requestId, executionTime, result) {
+  try {
+    // Fetch request details from DAL
+    const request = await executionDAL.getRequestDetailsForNotification(requestId);
+
+    if (!request) {
+      console.warn('Could not fetch request details for success notification');
+      return;
+    }
+    
+    // Prepare result preview (first 5 rows)
+    const rowCount = result.rowCount || 0;
+    const previewRows = (result.rows || []).slice(0, 5);
+    const resultPreview = previewRows.length > 0 
+      ? JSON.stringify(previewRows, null, 2)
+      : 'No rows returned';
+
+    const notificationData = {
+      requestId,
+      requesterEmail: request.requester_email,
+      database: `${request.db_instance} / ${request.db_name}`,
+      executionTime,
+      rowCount,
+      resultPreview
+    };
+
+    const message = approvalSuccessMessage(notificationData);
+    
+    // Send to common channel + requester DM
+    await slackService.sendToChannelAndDM(
+      request.requester_email,
+      message.blocks,
+      message.text
+    );
+    
+    console.log(`Slack success notification sent for request #${requestId}`);
+  } catch (error) {
+    console.error('Error sending execution success notification:', error.message);
+  }
+}
+
+async function sendExecutionFailureNotification(requestId, executionTime, errorMessage, stackTrace = null) {
+  try {
+    // Fetch request details from DAL
+    const request = await executionDAL.getRequestDetailsForNotification(requestId);
+
+    if (!request) {
+      console.warn('Could not fetch request details for failure notification');
+      return;
+    }
+
+    const notificationData = {
+      requestId,
+      requesterEmail: request.requester_email,
+      database: `${request.db_instance} / ${request.db_name}`,
+      errorMessage,
+      stackTrace
+    };
+
+    const message = approvalFailureMessage(notificationData);
+    
+    // Send to common channel + requester DM
+    await slackService.sendToChannelAndDM(
+      request.requester_email,
+      message.blocks,
+      message.text
+    );
+    
+    console.log(`Slack failure notification sent for request #${requestId}`);
+  } catch (error) {
+    console.error('Error sending execution failure notification:', error.message);
+  }
+}

@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node src/server.js",
     "dev": "nodemon src/server.js"
   },
   "keywords": [],
@@ -11,6 +12,10 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@mikro-orm/core": "^6.6.4",
+    "@mikro-orm/postgresql": "^6.6.4",
+    "@mikro-orm/reflection": "^6.6.4",
+    "@slack/web-api": "^7.13.0",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
@@ -20,7 +25,8 @@
     "mongodb": "^7.0.0",
     "multer": "^2.0.2",
     "pg": "^8.16.3",
-    "pgsql-ast-parser": "^12.0.1"
+    "pgsql-ast-parser": "^12.0.1",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.23",

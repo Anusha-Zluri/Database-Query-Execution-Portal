@@ -1,15 +1,57 @@
-const { pool } = require('../config/db');
+const { getORM } = require('../config/orm');
+
+/**
+ * Submissions DAL - MikroORM version
+ * Returns exact same data structure as pg pool version
+ */
 
 /* ================= CONNECTION ================= */
 
-function getClient() {
-  return pool.connect();
+async function getClient() {
+  const orm = await getORM();
+  return orm.em.fork();
 }
 
 /* ================= DASHBOARD ================= */
 
-async function getMySubmissions(userId) {
-  const { rows } = await pool.query(
+async function getMySubmissions(userId, filters = {}) {
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  // Build WHERE conditions
+  const conditions = ['r.requester_id = ?', "r.status != 'DRAFT'"];
+  const params = [userId];
+  
+  // Add status filter if provided
+  if (filters.status && filters.status !== 'ALL') {
+    conditions.push('r.status = ?');
+    params.push(filters.status);
+  }
+  
+  const whereClause = conditions.join(' AND ');
+  
+  // Get total count with filters
+  const countResult = await em.getKnex().raw(
+    `
+    SELECT COUNT(*) as total
+    FROM requests r
+    WHERE ${whereClause}
+    `,
+    params
+  );
+  
+  const total = parseInt(countResult.rows[0].total);
+  
+  // Pagination
+  const limit = parseInt(filters.limit) || 10;
+  const page = parseInt(filters.page) || 1;
+  const offset = (page - 1) * limit;
+  
+  // Add pagination params
+  params.push(limit, offset);
+  
+  // Use knex query builder for parameterized queries
+  const result = await em.getKnex().raw(
     `
     SELECT
       r.id,
@@ -18,6 +60,7 @@ async function getMySubmissions(userId) {
       r.request_type,
       r.status,
       r.created_at,
+      r.rejection_reason,
 
       rq.query_text,
       rs.file_path,
@@ -37,20 +80,66 @@ async function getMySubmissions(userId) {
       LIMIT 1
     ) e ON true
 
-    WHERE r.requester_id = $1
-      AND r.status != 'DRAFT'
+    WHERE ${whereClause}
     ORDER BY r.created_at DESC
+    LIMIT ? OFFSET ?
+    `,
+    params
+  );
+
+  return {
+    rows: result.rows || [],
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit)
+  };
+}
+
+/* ================= STATUS COUNTS ================= */
+
+async function getSubmissionStatusCounts(userId) {
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  const result = await em.getKnex().raw(
+    `
+    SELECT 
+      status,
+      COUNT(*) as count
+    FROM requests 
+    WHERE requester_id = ? 
+      AND status != 'DRAFT'
+    GROUP BY status
     `,
     [userId]
   );
 
-  return rows;
+  // Convert to object with default 0 values
+  const counts = {
+    ALL: 0,
+    PENDING: 0,
+    EXECUTED: 0,
+    REJECTED: 0,
+    FAILED: 0
+  };
+
+  let total = 0;
+  (result.rows || []).forEach(row => {
+    const count = parseInt(row.count);
+    counts[row.status] = count;
+    total += count;
+  });
+  
+  counts.ALL = total;
+  return counts;
 }
 
-/* ================= DETAILS ================= */
-
 async function getSubmissionDetails(submissionId, userId) {
-  const { rows } = await pool.query(
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  const result = await em.getKnex().raw(
     `
     SELECT
       r.id,
@@ -62,6 +151,7 @@ async function getSubmissionDetails(submissionId, userId) {
       r.status,
       r.comment,
       r.created_at,
+      r.rejection_reason,
 
       rq.query_text,
       rs.file_path,
@@ -88,19 +178,19 @@ async function getSubmissionDetails(submissionId, userId) {
       LIMIT 1
     ) e ON true
 
-    WHERE r.id = $1
-      AND r.requester_id = $2
+    WHERE r.id = ?
+      AND r.requester_id = ?
     `,
     [submissionId, userId]
   );
 
-  return rows[0] || null;
+  return result.rows && result.rows.length > 0 ? result.rows[0] : null;
 }
 
 /* ================= CLONE ================= */
 
-async function cloneSubmission(client, sourceId, userId) {
-  const { rows } = await client.query(
+async function cloneSubmission(em, sourceId, userId) {
+  const result = await em.getKnex().raw(
     `
     INSERT INTO requests (
       requester_id,
@@ -120,43 +210,46 @@ async function cloneSubmission(client, sourceId, userId) {
       'DRAFT',
       comment
     FROM requests
-    WHERE id = $1 AND requester_id = $2
+    WHERE id = ? AND requester_id = ?
     RETURNING id
     `,
     [sourceId, userId]
   );
 
-  return rows[0]?.id || null;
+  return result.rows && result.rows.length > 0 ? result.rows[0].id : null;
 }
 
-async function cloneQuery(client, sourceId, newRequestId) {
-  await client.query(
+async function cloneQuery(em, sourceId, newRequestId) {
+  await em.getKnex().raw(
     `
     INSERT INTO request_queries (request_id, query_text)
-    SELECT $2, query_text
+    SELECT ?, query_text
     FROM request_queries
-    WHERE request_id = $1
+    WHERE request_id = ?
     `,
-    [sourceId, newRequestId]
+    [newRequestId, sourceId]
   );
 }
 
-async function cloneScript(client, sourceId, newRequestId) {
-  await client.query(
+async function cloneScript(em, sourceId, newRequestId) {
+  await em.getKnex().raw(
     `
     INSERT INTO request_scripts (request_id, file_path, checksum)
-    SELECT $2, file_path, checksum
+    SELECT ?, file_path, checksum
     FROM request_scripts
-    WHERE request_id = $1
+    WHERE request_id = ?
     `,
-    [sourceId, newRequestId]
+    [newRequestId, sourceId]
   );
 }
 
 /* ================= DRAFT ================= */
 
 async function getDraftForEdit(submissionId, userId) {
-  const { rows } = await pool.query(
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  const result = await em.getKnex().raw(
     `
     SELECT
       r.id,
@@ -170,18 +263,18 @@ async function getDraftForEdit(submissionId, userId) {
     FROM requests r
     LEFT JOIN request_queries rq ON rq.request_id = r.id
     LEFT JOIN request_scripts rs ON rs.request_id = r.id
-    WHERE r.id = $1
-      AND r.requester_id = $2
+    WHERE r.id = ?
+      AND r.requester_id = ?
       AND r.status = 'DRAFT'
     `,
     [submissionId, userId]
   );
 
-  return rows[0] || null;
+  return result.rows && result.rows.length > 0 ? result.rows[0] : null;
 }
 
 async function updateDraft(
-  client,
+  em,
   {
     submissionId,
     userId,
@@ -192,15 +285,15 @@ async function updateDraft(
     content
   }
 ) {
-  const { rowCount } = await client.query(
+  const result = await em.getKnex().raw(
     `
     UPDATE requests
-    SET pod_id = $1,
-        db_instance = $2,
-        db_name = $3,
-        comment = $4
-    WHERE id = $5
-      AND requester_id = $6
+    SET pod_id = ?,
+        db_instance = ?,
+        db_name = ?,
+        comment = ?
+    WHERE id = ?
+      AND requester_id = ?
       AND status = 'DRAFT'
     `,
     [
@@ -213,43 +306,62 @@ async function updateDraft(
     ]
   );
 
-  if (!rowCount) return false;
+  if (!result.rowCount) return false;
 
-  await client.query(
+  await em.getKnex().raw(
     `
     UPDATE request_queries
-    SET query_text = $2
-    WHERE request_id = $1
+    SET query_text = ?
+    WHERE request_id = ?
     `,
-    [submissionId, content]
+    [content, submissionId]
   );
 
   return true;
 }
 
 async function submitDraft(submissionId, userId) {
-  const { rowCount } = await pool.query(
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  const result = await em.getKnex().raw(
     `
     UPDATE requests
     SET status = 'PENDING'
-    WHERE id = $1
-      AND requester_id = $2
+    WHERE id = ?
+      AND requester_id = ?
       AND status = 'DRAFT'
     `,
     [submissionId, userId]
   );
 
-  return rowCount > 0;
+  return result.rowCount > 0;
+}
+
+async function beginTransaction(em) {
+  await em.begin();
+}
+
+async function commitTransaction(em) {
+  await em.commit();
+}
+
+async function rollbackTransaction(em) {
+  await em.rollback();
 }
 
 module.exports = {
   getClient,
   getMySubmissions,
+  getSubmissionStatusCounts,
   getSubmissionDetails,
   cloneSubmission,
   cloneQuery,
   cloneScript,
   getDraftForEdit,
   updateDraft,
-  submitDraft
+  submitDraft,
+  beginTransaction,
+  commitTransaction,
+  rollbackTransaction
 };

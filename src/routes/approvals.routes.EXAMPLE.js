@@ -1,24 +1,26 @@
+// EXAMPLE: How to add validation to approvals routes
+// Copy the validation middleware usage to your actual approvals.routes.js
+
 const express = require('express');
 const router = express.Router();
-
 const authMiddleware = require('../middlewares/auth.middleware');
-const approvalsController = require('../controllers/approvals.controller');
 const { validate } = require('../middlewares/validate.middleware');
-const { 
-  getApprovalsQuerySchema, 
+const {
+  getApprovalsQuerySchema,
   approvalIdParamSchema,
-  rejectRequestSchema 
+  rejectRequestSchema
 } = require('../validations/approvals.validation');
+const approvalsController = require('../controllers/approvals.controller');
 
-// GET pending approvals (with query validation)
+// GET /approvals - with query validation
 router.get(
-  '/pending',
+  '/',
   authMiddleware,
   validate(getApprovalsQuerySchema, 'query'),
   approvalsController.getPendingApprovals
 );
 
-// Preview script content (with ID validation)
+// GET /approvals/:id/script - with param validation
 router.get(
   '/:id/script',
   authMiddleware,
@@ -26,7 +28,7 @@ router.get(
   approvalsController.getApprovalScriptPreview
 );
 
-// Approve (with ID validation)
+// POST /approvals/:id/approve - with param validation
 router.post(
   '/:id/approve',
   authMiddleware,
@@ -34,13 +36,4 @@ router.post(
   approvalsController.approveRequest
 );
 
-// Reject (with ID and body validation)
-router.post(
-  '/:id/reject',
-  authMiddleware,
-  validate(approvalIdParamSchema, 'params'),
-  validate(rejectRequestSchema, 'body'),
-  approvalsController.rejectRequest
-);
-
-module.exports = router;
+// POST /approvals/:id/reject - with par

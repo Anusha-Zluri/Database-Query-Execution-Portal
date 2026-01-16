@@ -1,88 +1,105 @@
-const { pool } = require('../config/db');
+const { getORM } = require('../config/orm');
 
+/**
+ * Execution DAL - MikroORM version
+ * Handles execution records with transaction support
+ */
 
-function getClient() {
-  return pool.connect();
+async function getClient() {
+  // For MikroORM, we return an EntityManager that can be used for transactions
+  const orm = await getORM();
+  return orm.em.fork();
 }
 
 /* ================= REQUEST ================= */
 
-async function lockApprovedRequest(client, requestId) {
-  const { rows } = await client.query(
+async function lockApprovedRequest(em, requestId) {
+  // Use knex for parameterized queries
+  const result = await em.getKnex().raw(
     `
     SELECT id, request_type, db_instance, db_name
     FROM requests
-    WHERE id = $1 AND status = 'APPROVED'
+    WHERE id = ? AND status = 'APPROVED'
     FOR UPDATE
     `,
     [requestId]
   );
 
-  return rows[0] || null;
+  return result.rows && result.rows.length > 0 ? result.rows[0] : null;
 }
 
-async function loadQueryText(client, requestId) {
-  const { rows } = await client.query(
-    `SELECT query_text FROM request_queries WHERE request_id = $1`,
+async function loadQueryText(em, requestId) {
+  const result = await em.getKnex().raw(
+    `SELECT query_text FROM request_queries WHERE request_id = ?`,
     [requestId]
   );
-  return rows[0]?.query_text;
+  return result.rows && result.rows.length > 0 ? result.rows[0].query_text : null;
 }
 
-async function loadScriptPath(client, requestId) {
-  const { rows } = await client.query(
-    `SELECT file_path FROM request_scripts WHERE request_id = $1`,
+async function loadScriptPath(em, requestId) {
+  const result = await em.getKnex().raw(
+    `SELECT file_path FROM request_scripts WHERE request_id = ?`,
     [requestId]
   );
-  return rows[0]?.file_path;
+  return result.rows && result.rows.length > 0 ? result.rows[0].file_path : null;
 }
 
 /* ================= EXECUTION ================= */
 
-async function createExecution(client, requestId) {
-  const { rows } = await client.query(
+async function createExecution(em, requestId) {
+  const result = await em.getKnex().raw(
     `
     INSERT INTO executions (request_id, status, started_at)
-    VALUES ($1, 'RUNNING', NOW())
+    VALUES (?, 'RUNNING', NOW())
     RETURNING id
     `,
     [requestId]
   );
 
-  return rows[0].id;
+  return result.rows && result.rows.length > 0 ? result.rows[0].id : null;
 }
 
 async function markExecutionSuccess(executionId, durationMs, result) {
-  await pool.query(
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  await em.getKnex().raw(
     `
     UPDATE executions
     SET status='SUCCESS',
         finished_at=NOW(),
-        duration_ms=$2,
-        result_json=$3
-    WHERE id=$1
+        duration_ms=?,
+        result_json=?
+    WHERE id=?
     `,
-    [executionId, durationMs, JSON.stringify(result)]
+    [durationMs, JSON.stringify(result), executionId]
   );
 }
 
-async function markExecutionFailure(executionId, durationMs, message) {
-  await pool.query(
+async function markExecutionFailure(executionId, durationMs, message, stackTrace = null) {
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  await em.getKnex().raw(
     `
     UPDATE executions
     SET status='FAILED',
         finished_at=NOW(),
-        duration_ms=$2,
-        error_message=$3
-    WHERE id=$1
+        duration_ms=?,
+        error_message=?,
+        stack_trace=?
+    WHERE id=?
     `,
-    [executionId, durationMs, message]
+    [durationMs, message, stackTrace, executionId]
   );
 }
 
 async function markRequestExecuted(requestId) {
-  await pool.query(
-    `UPDATE requests SET status='EXECUTED' WHERE id=$1`,
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  await em.getKnex().raw(
+    `UPDATE requests SET status='EXECUTED' WHERE id=?`,
     [requestId]
   );
 }
@@ -90,46 +107,93 @@ async function markRequestExecuted(requestId) {
 /* ================= RESULT RETRIEVAL ================= */
 
 async function getExecutionById(executionId) {
-  const { rows } = await pool.query(
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  const result = await em.getKnex().raw(
     `
     SELECT id, request_id, status, result_json, result_file_path, is_truncated
     FROM executions
-    WHERE id = $1
+    WHERE id = ?
     `,
     [executionId]
   );
-  return rows[0] || null;
+  
+  return result.rows && result.rows.length > 0 ? result.rows[0] : null;
 }
 
 async function checkExecutionAccess(executionId, userId) {
-  const { rows } = await pool.query(
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  const result = await em.getKnex().raw(
     `
     SELECT 1
     FROM executions e
     JOIN requests r ON r.id = e.request_id
     LEFT JOIN pods p ON p.id = r.pod_id
-    WHERE e.id = $1
-      AND (r.requester_id = $2 OR p.manager_user_id = $2)
+    WHERE e.id = ?
+      AND (r.requester_id = ? OR p.manager_user_id = ?)
     `,
-    [executionId, userId]
+    [executionId, userId, userId]
   );
-  return rows.length > 0;
+  
+  return result.rows && result.rows.length > 0;
 }
 
-async function beginTransaction(client) {
-  await client.query('BEGIN');
+async function beginTransaction(em) {
+  await em.begin();
 }
 
-async function commitTransaction(client) {
-  await client.query('COMMIT');
+async function commitTransaction(em) {
+  await em.commit();
 }
 
-async function rollbackTransaction(client) {
-  await client.query('ROLLBACK');
+async function rollbackTransaction(em) {
+  await em.rollback();
+}
+
+async function updateExecutionWithFile(executionId, durationMs, resultJson, resultFilePath, isTruncated) {
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  await em.getKnex().raw(
+    `
+    UPDATE executions
+    SET status='SUCCESS',
+        finished_at=NOW(),
+        duration_ms=?,
+        result_json=?,
+        result_file_path=?,
+        is_truncated=?
+    WHERE id=?
+    `,
+    [durationMs, JSON.stringify(resultJson), resultFilePath, isTruncated, executionId]
+  );
+}
+
+async function getRequestDetailsForNotification(requestId) {
+  const orm = await getORM();
+  const em = orm.em.fork();
+  
+  const result = await em.getKnex().raw(
+    `
+    SELECT 
+      r.id,
+      r.db_instance,
+      r.db_name,
+      u.email as requester_email
+    FROM requests r
+    JOIN users u ON r.requester_id = u.id
+    WHERE r.id = ?
+    `,
+    [requestId]
+  );
+  
+  return result.rows && result.rows.length > 0 ? result.rows[0] : null;
 }
 
 module.exports = {
-  pool,
   getClient,
   beginTransaction,
   commitTransaction,
@@ -142,5 +206,7 @@ module.exports = {
   markExecutionFailure,
   markRequestExecuted,
   getExecutionById,
-  checkExecutionAccess
+  checkExecutionAccess,
+  updateExecutionWithFile,
+  getRequestDetailsForNotification
 };

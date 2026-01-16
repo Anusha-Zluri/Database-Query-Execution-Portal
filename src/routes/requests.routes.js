@@ -4,6 +4,13 @@ const router = express.Router();
 const authMiddleware = require('../middlewares/auth.middleware');
 const requestsController = require('../controllers/requests.controller');
 const uploadScript = require('../middlewares/uploadScripts');
+const { validate } = require('../middlewares/validate.middleware');
+const { 
+  submitRequestSchema,
+  requestIdParamSchema,
+  getInstancesQuerySchema,
+  getDatabasesQuerySchema
+} = require('../validations/requests.validation');
 
 // Get database types
 router.get(
@@ -16,6 +23,7 @@ router.get(
 router.get(
   '/instances',
   authMiddleware,
+  validate(getInstancesQuerySchema, 'query'),
   requestsController.getInstances
 );
 
@@ -23,6 +31,7 @@ router.get(
 router.get(
   '/databases',
   authMiddleware,
+  validate(getDatabasesQuerySchema, 'query'),
   requestsController.getDatabases
 );
 
@@ -51,15 +60,16 @@ router.post(
       next();
     });
   },
+  validate(submitRequestSchema, 'body'),
   requestsController.submitRequest
 );
 
-//endpoint to view the entire script
+// Endpoint to view the entire script
 router.get(
   '/:id/script',
   authMiddleware,
+  validate(requestIdParamSchema, 'params'),
   requestsController.getScriptForApproval
 );
-
 
 module.exports = router;

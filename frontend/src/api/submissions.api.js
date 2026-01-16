@@ -1,7 +1,14 @@
 import axios from "../utils/axios";
 
-export const getMySubmissions = async () => {
-  const res = await axios.get("/submissions");
+export const getMySubmissions = async (page = 1, limit = 10, status = 'ALL') => {
+  const res = await axios.get("/submissions", {
+    params: { page, limit, status }
+  });
+  return res.data;
+};
+
+export const getSubmissionStatusCounts = async () => {
+  const res = await axios.get("/submissions/counts");
   return res.data;
 };
 

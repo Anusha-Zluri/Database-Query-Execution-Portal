@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getMySubmissions, cloneSubmission, getSubmissionDetails } from "../api/submissions.api";
+import { getMySubmissions, cloneSubmission, getSubmissionDetails, getSubmissionStatusCounts } from "../api/submissions.api";
 
 export default function MySubmissions({ onClone }) {
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -8,13 +8,23 @@ export default function MySubmissions({ onClone }) {
   const [error, setError] = useState("");
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [statusCounts, setStatusCounts] = useState({});
+  const limit = 10;
 
-  const fetchSubmissions = async () => {
+  const fetchSubmissions = async (page = 1, status = statusFilter) => {
     setLoading(true);
     setError("");
     try {
-      const data = await getMySubmissions();
-      setSubmissions(data || []);
+      const data = await getMySubmissions(page, limit, status);
+      setSubmissions(data.rows || []);
+      setTotal(data.total || 0);
+      setTotalPages(data.totalPages || 1);
+      setCurrentPage(data.page || 1);
     } catch (err) {
       console.error("Failed to fetch submissions:", err);
       setError("Failed to load submissions");
@@ -23,9 +33,27 @@ export default function MySubmissions({ onClone }) {
     }
   };
 
+  const fetchStatusCounts = async () => {
+    try {
+      const counts = await getSubmissionStatusCounts();
+      setStatusCounts(counts);
+    } catch (err) {
+      console.error("Failed to fetch status counts:", err);
+    }
+  };
+
   useEffect(() => {
-    fetchSubmissions();
+    fetchSubmissions(currentPage, statusFilter);
+  }, [currentPage, statusFilter]);
+
+  useEffect(() => {
+    fetchStatusCounts();
   }, []);
+
+  const handleStatusFilterChange = (newStatus) => {
+    setStatusFilter(newStatus);
+    setCurrentPage(1); // Reset to first page when changing filter
+  };
 
   const handleClone = async (submissionId) => {
     try {
@@ -40,16 +68,9 @@ export default function MySubmissions({ onClone }) {
   };
 
   const handleViewDetails = async (submissionId, status) => {
-    if (status === "EXECUTED" || status === "FAILED") {
+    if (status === "EXECUTED" || status === "FAILED" || status === "REJECTED") {
       try {
         const details = await getSubmissionDetails(submissionId);
-        console.log("=== FULL SUBMISSION DETAILS ===");
-        console.log("Full object:", details);
-        console.log("Content field:", details.content);
-        console.log("Content type:", typeof details.content);
-        console.log("Content length:", details.content?.length);
-        console.log("Request type:", details.requestType);
-        console.log("All keys:", Object.keys(details));
         setSelectedSubmission(details);
         setShowDetailsModal(true);
       } catch (err) {
@@ -118,15 +139,6 @@ export default function MySubmissions({ onClone }) {
     }
   };
 
-  const filteredSubmissions = statusFilter === "ALL" 
-    ? submissions 
-    : submissions.filter(s => s.status === statusFilter);
-
-  const getStatusCount = (status) => {
-    if (status === "ALL") return submissions.length;
-    return submissions.filter(s => s.status === status).length;
-  };
-
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     const date = new Date(dateString);
@@ -162,59 +174,62 @@ export default function MySubmissions({ onClone }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setStatusFilter("ALL")}
+            onClick={() => handleStatusFilterChange("ALL")}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               statusFilter === "ALL"
                 ? "bg-gradient-to-r from-[#1a9d7c] to-[#14b8a6] text-white shadow-md"
                 : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
             }`}
           >
-            All ({getStatusCount("ALL")})
+            All ({statusCounts.ALL || 0})
           </button>
           <button
-            onClick={() => setStatusFilter("PENDING")}
+            onClick={() => handleStatusFilterChange("PENDING")}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               statusFilter === "PENDING"
                 ? "bg-gradient-to-r from-[#1a9d7c] to-[#14b8a6] text-white shadow-md"
                 : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
             }`}
           >
-            Pending ({getStatusCount("PENDING")})
+            Pending ({statusCounts.PENDING || 0})
           </button>
           <button
-            onClick={() => setStatusFilter("EXECUTED")}
+            onClick={() => handleStatusFilterChange("EXECUTED")}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               statusFilter === "EXECUTED"
                 ? "bg-gradient-to-r from-[#1a9d7c] to-[#14b8a6] text-white shadow-md"
                 : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
             }`}
           >
-            Executed ({getStatusCount("EXECUTED")})
+            Executed ({statusCounts.EXECUTED || 0})
           </button>
           <button
-            onClick={() => setStatusFilter("REJECTED")}
+            onClick={() => handleStatusFilterChange("REJECTED")}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               statusFilter === "REJECTED"
                 ? "bg-gradient-to-r from-[#1a9d7c] to-[#14b8a6] text-white shadow-md"
                 : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
             }`}
           >
-            Rejected ({getStatusCount("REJECTED")})
+            Rejected ({statusCounts.REJECTED || 0})
           </button>
           <button
-            onClick={() => setStatusFilter("FAILED")}
+            onClick={() => handleStatusFilterChange("FAILED")}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               statusFilter === "FAILED"
                 ? "bg-gradient-to-r from-[#1a9d7c] to-[#14b8a6] text-white shadow-md"
                 : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
             }`}
           >
-            Failed ({getStatusCount("FAILED")})
+            Failed ({statusCounts.FAILED || 0})
           </button>
         </div>
 
         <button
-          onClick={() => fetchSubmissions()}
+          onClick={() => {
+            fetchSubmissions(currentPage, statusFilter);
+            fetchStatusCounts();
+          }}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#1a9d7c] to-[#14b8a6] text-white rounded-lg hover:shadow-md transition-all disabled:opacity-50"
         >
@@ -227,7 +242,7 @@ export default function MySubmissions({ onClone }) {
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        {filteredSubmissions.length === 0 ? (
+        {submissions.length === 0 ? (
           <div className="text-center py-16">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 text-slate-300 mx-auto mb-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
@@ -248,7 +263,7 @@ export default function MySubmissions({ onClone }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filteredSubmissions.map((submission) => (
+              {submissions.map((submission) => (
                 <tr key={submission.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 text-sm font-medium text-slate-900">{submission.id}</td>
                   <td className="px-6 py-4 text-sm text-slate-700">{submission.db_instance} / {submission.db_name}</td>
@@ -257,6 +272,9 @@ export default function MySubmissions({ onClone }) {
                     <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(submission.status)}`}>
                       <span>{getStatusIcon(submission.status)}</span>
                       {submission.status}
+                      {submission.status === "REJECTED" && submission.rejection_reason && (
+                        <span className="ml-1" title="Has rejection reason">ℹ️</span>
+                      )}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">{formatDate(submission.created_at)}</td>
@@ -264,16 +282,16 @@ export default function MySubmissions({ onClone }) {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleViewDetails(submission.id, submission.status)}
-                        disabled={submission.status !== "EXECUTED" && submission.status !== "FAILED"}
+                        disabled={submission.status !== "EXECUTED" && submission.status !== "FAILED" && submission.status !== "REJECTED"}
                         className={`p-2 rounded-lg transition-colors ${
-                          submission.status === "EXECUTED" || submission.status === "FAILED"
+                          submission.status === "EXECUTED" || submission.status === "FAILED" || submission.status === "REJECTED"
                             ? "text-slate-600 hover:text-[#1a9d7c] hover:bg-slate-100"
                             : "text-slate-300 cursor-not-allowed"
                         }`}
                         title={
-                          submission.status === "EXECUTED" || submission.status === "FAILED"
+                          submission.status === "EXECUTED" || submission.status === "FAILED" || submission.status === "REJECTED"
                             ? "View Details" 
-                            : "Only available for executed/failed submissions"
+                            : "Only available for executed/failed/rejected submissions"
                         }
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -299,22 +317,71 @@ export default function MySubmissions({ onClone }) {
         )}
       </div>
 
-      {/* Legend */}
-      {filteredSubmissions.length > 0 && (
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-          <div className="flex items-center gap-8 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700">Legend:</span>
-              <span className="text-slate-600">👁️ = View Details</span>
-              <span className="text-slate-600">🔄 = Clone & Resubmit</span>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-6 py-4">
+          <div className="text-sm text-slate-600">
+            Showing {((currentPage - 1) * limit) + 1} to {Math.min(currentPage * limit, total)} of {total} submissions
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <div className="flex items-center gap-1">
+              {/* Show first page */}
+              {currentPage > 3 && (
+                <>
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    className="px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-all"
+                  >
+                    1
+                  </button>
+                  {currentPage > 4 && <span className="px-2 text-slate-400">...</span>}
+                </>
+              )}
+              
+              {/* Show pages around current page */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(page => page >= currentPage - 2 && page <= currentPage + 2)
+                .map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                      currentPage === page
+                        ? "bg-gradient-to-r from-[#1a9d7c] to-[#14b8a6] text-white"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              
+              {/* Show last page */}
+              {currentPage < totalPages - 2 && (
+                <>
+                  {currentPage < totalPages - 3 && <span className="px-2 text-slate-400">...</span>}
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    className="px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-all"
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
             </div>
-            <div className="flex items-center gap-4">
-              <span className="font-semibold text-slate-700">Status:</span>
-              <span className="text-slate-600">✓ Executed</span>
-              <span className="text-slate-600">⏳ Pending</span>
-              <span className="text-slate-600">✗ Rejected</span>
-              <span className="text-slate-600">△ Failed</span>
-            </div>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
           </div>
         </div>
       )}
@@ -391,22 +458,39 @@ export default function MySubmissions({ onClone }) {
                 </div>
               )}
 
-              {/* Query/Script */}
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  {selectedSubmission.requestType === "SCRIPT" ? "Script File" : "Query"}
-                </label>
-                {selectedSubmission.content ? (
-                  <pre className="text-sm text-slate-100 mt-1 bg-slate-900 rounded-lg p-4 overflow-x-auto font-mono whitespace-pre-wrap">
-{selectedSubmission.content}
-                  </pre>
-                ) : (
-                  <div className="mt-1 bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p className="text-sm text-red-600">No content available</p>
-                    <p className="text-xs text-red-500 mt-1">Debug: {JSON.stringify(selectedSubmission)}</p>
+              {/* Rejection Reason - Show prominently for rejected requests */}
+              {selectedSubmission.status === "REJECTED" && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-red-600">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                    </svg>
+                    <label className="text-sm font-semibold text-red-700 uppercase tracking-wider">Request Rejected</label>
                   </div>
-                )}
-              </div>
+                  <p className="text-sm text-red-800 bg-white rounded-lg p-3 border border-red-200">
+                    {selectedSubmission.rejectionReason || "No rejection reason provided."}
+                  </p>
+                </div>
+              )}
+
+              {/* Query/Script - Only show for non-rejected requests */}
+              {selectedSubmission.status !== "REJECTED" && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    {selectedSubmission.requestType === "SCRIPT" ? "Script File" : "Query"}
+                  </label>
+                  {selectedSubmission.content ? (
+                    <pre className="text-sm text-slate-100 mt-1 bg-slate-900 rounded-lg p-4 overflow-x-auto font-mono whitespace-pre-wrap">
+{selectedSubmission.content}
+                    </pre>
+                  ) : (
+                    <div className="mt-1 bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-sm text-red-600">No content available</p>
+                      <p className="text-xs text-red-500 mt-1">Debug: {JSON.stringify(selectedSubmission)}</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Execution Details */}
               {selectedSubmission.execution && (

@@ -1,6 +1,9 @@
 const fs = require('fs/promises');
 const instanceRegistry = require('../registry/instances.registry');
 const requestsDAL = require('../dal/requests.dal');
+const slackService = require('../services/slack.service');
+const { newSubmissionMessage } = require('../services/slack.messages');
+const { pool } = require('../config/db');
 
 /* ================= SCRIPT ANALYSIS ================= */
 
@@ -121,7 +124,7 @@ exports.submitRequest = async (req, res) => {
       const analysis = analyzeQuery(content, instance.engine);
       await requestsDAL.insertQueryRequest(client, requestId, content, analysis);
     } else {
-      const scriptContent = await fs.readFile(req.file.path, 'utf-8');
+      const scriptContent = await fs.readFile(req.file.path, 'utf-8'); //script preview
       const analysis = analyzeScript(scriptContent);
 
       await requestsDAL.insertScriptRequest(client, {
@@ -135,6 +138,18 @@ exports.submitRequest = async (req, res) => {
 
     await client.query('COMMIT');
 
+    // Send Slack notification (non-blocking)
+    sendNewSubmissionNotification(requestId, userId, {
+      request_type,
+      db_instance,
+      db_name,
+      pod_id,
+      content,
+      filePath: req.file?.path
+    }).catch(err => {
+      console.error('Failed to send Slack notification:', err.message);
+    });
+
     res.status(201).json({
       message: 'Request submitted successfully',
       request_id: requestId,
@@ -144,7 +159,7 @@ exports.submitRequest = async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Submit request error:', err);
-    res.status(400).json({ message: err.message });
+    res.status(500).json({ message: err.message });
   } finally {
     client.release();
   }
@@ -301,3 +316,59 @@ exports.getDatabases = async (req, res) => {
     });
   }
 };
+
+/* ================= SLACK NOTIFICATION HELPER ================= */
+
+async function sendNewSubmissionNotification(requestId, userId, data) {
+  try {
+    // Fetch user and pod details
+    const userResult = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
+    const podResult = await pool.query('SELECT name FROM pods WHERE id = $1', [data.pod_id]);
+    
+    if (!userResult.rows[0] || !podResult.rows[0]) {
+      console.warn('Could not fetch user or pod details for Slack notification');
+      return;
+    }
+
+    const requesterEmail = userResult.rows[0].email;
+    const podName = podResult.rows[0].name;
+    
+    // Get script preview if it's a script request
+    let scriptPreview = '';
+    if (data.request_type === 'SCRIPT' && data.filePath) {
+      try {
+        const scriptContent = await fs.readFile(data.filePath, 'utf-8');
+        // Show first 500 characters as preview
+        scriptPreview = scriptContent.length > 500 
+          ? scriptContent.substring(0, 500) + '...' 
+          : scriptContent;
+      } catch (error) {
+        console.error('Failed to read script file for Slack preview:', error.message);
+        scriptPreview = '[Script file could not be read]';
+      }
+    }
+    
+    // Prepare notification data
+    const notificationData = {
+      requestId,
+      requesterEmail,
+      database: data.db_instance,
+      dbName: data.db_name,
+      requestType: data.request_type,
+      pod: podName,
+      queryPreview: data.content || scriptPreview,
+      scriptPath: data.filePath ? data.filePath.split('/').pop() : '' // Just filename, not full path
+    };
+
+    // Create message
+    const message = newSubmissionMessage(notificationData);
+    
+    // Send to common channel (non-blocking)
+    await slackService.sendToCommonChannel(message.blocks, message.text);
+    
+    console.log(`Slack notification sent for request #${requestId}`);
+  } catch (error) {
+    console.error('Error sending new submission notification:', error.message);
+    // Don't throw - we don't want to break the request submission
+  }
+}
