@@ -1,4 +1,5 @@
 const { getORM } = require('../config/orm');
+const { pool } = require('../config/db');
 
 /**
  * Submissions DAL - MikroORM version
@@ -8,8 +9,7 @@ const { getORM } = require('../config/orm');
 /* ================= CONNECTION ================= */
 
 async function getClient() {
-  const orm = await getORM();
-  return orm.em.fork();
+  return pool.connect();
 }
 
 /* ================= DASHBOARD ================= */
@@ -24,17 +24,31 @@ async function getMySubmissions(userId, filters = {}) {
   
   // Add status filter if provided
   if (filters.status && filters.status !== 'ALL') {
-    conditions.push('r.status = ?');
-    params.push(filters.status);
+    if (filters.status === 'FAILED') {
+      // For FAILED, check execution status
+      conditions.push("e.status = 'FAILED'");
+    } else {
+      // For other statuses, check request status AND execution is not failed
+      conditions.push('r.status = ?');
+      conditions.push("(e.status IS NULL OR e.status != 'FAILED')");
+      params.push(filters.status);
+    }
   }
   
   const whereClause = conditions.join(' AND ');
   
-  // Get total count with filters
+  // Get total count with filters - need to include execution join for FAILED filter
   const countResult = await em.getKnex().raw(
     `
     SELECT COUNT(*) as total
     FROM requests r
+    LEFT JOIN LATERAL (
+      SELECT status
+      FROM executions
+      WHERE request_id = r.id
+      ORDER BY started_at DESC
+      LIMIT 1
+    ) e ON true
     WHERE ${whereClause}
     `,
     params
@@ -105,12 +119,28 @@ async function getSubmissionStatusCounts(userId) {
   const result = await em.getKnex().raw(
     `
     SELECT 
-      status,
+      CASE
+        -- If execution exists and failed, count as FAILED
+        WHEN e.status = 'FAILED' THEN 'FAILED'
+        -- Otherwise use request status
+        ELSE r.status
+      END as status,
       COUNT(*) as count
-    FROM requests 
-    WHERE requester_id = ? 
-      AND status != 'DRAFT'
-    GROUP BY status
+    FROM requests r
+    LEFT JOIN LATERAL (
+      SELECT status
+      FROM executions
+      WHERE request_id = r.id
+      ORDER BY started_at DESC
+      LIMIT 1
+    ) e ON true
+    WHERE r.requester_id = ? 
+      AND r.status != 'DRAFT'
+    GROUP BY 
+      CASE
+        WHEN e.status = 'FAILED' THEN 'FAILED'
+        ELSE r.status
+      END
     `,
     [userId]
   );
@@ -274,7 +304,7 @@ async function getDraftForEdit(submissionId, userId) {
 }
 
 async function updateDraft(
-  em,
+  client,
   {
     submissionId,
     userId,
@@ -285,15 +315,15 @@ async function updateDraft(
     content
   }
 ) {
-  const result = await em.getKnex().raw(
+  const result = await client.query(
     `
     UPDATE requests
-    SET pod_id = ?,
-        db_instance = ?,
-        db_name = ?,
-        comment = ?
-    WHERE id = ?
-      AND requester_id = ?
+    SET pod_id = $1,
+        db_instance = $2,
+        db_name = $3,
+        comment = $4
+    WHERE id = $5
+      AND requester_id = $6
       AND status = 'DRAFT'
     `,
     [
@@ -306,13 +336,13 @@ async function updateDraft(
     ]
   );
 
-  if (!result.rowCount) return false;
+  if (result.rowCount === 0) return false;
 
-  await em.getKnex().raw(
+  await client.query(
     `
     UPDATE request_queries
-    SET query_text = ?
-    WHERE request_id = ?
+    SET query_text = $1
+    WHERE request_id = $2
     `,
     [content, submissionId]
   );

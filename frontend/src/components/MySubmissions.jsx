@@ -68,15 +68,13 @@ export default function MySubmissions({ onClone }) {
   };
 
   const handleViewDetails = async (submissionId, status) => {
-    if (status === "EXECUTED" || status === "FAILED" || status === "REJECTED") {
-      try {
-        const details = await getSubmissionDetails(submissionId);
-        setSelectedSubmission(details);
-        setShowDetailsModal(true);
-      } catch (err) {
-        console.error("Error loading details:", err);
-        setError(err.response?.data?.message || "Failed to load submission details");
-      }
+    try {
+      const details = await getSubmissionDetails(submissionId);
+      setSelectedSubmission(details);
+      setShowDetailsModal(true);
+    } catch (err) {
+      console.error("Error loading details:", err);
+      setError(err.response?.data?.message || "Failed to load submission details");
     }
   };
 
@@ -107,6 +105,16 @@ export default function MySubmissions({ onClone }) {
       console.error('Download error:', err);
       setError("Failed to download results");
     }
+  };
+
+  // Helper to determine actual display status
+  const getDisplayStatus = (submission) => {
+    // If execution exists and failed, show FAILED regardless of request status
+    if (submission.execution_status === 'FAILED') {
+      return 'FAILED';
+    }
+    // Otherwise use the request status
+    return submission.status;
   };
 
   const getStatusIcon = (status) => {
@@ -263,15 +271,17 @@ export default function MySubmissions({ onClone }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {submissions.map((submission) => (
+              {submissions.map((submission) => {
+                const displayStatus = getDisplayStatus(submission);
+                return (
                 <tr key={submission.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 text-sm font-medium text-slate-900">{submission.id}</td>
                   <td className="px-6 py-4 text-sm text-slate-700">{submission.db_instance} / {submission.db_name}</td>
                   <td className="px-6 py-4 text-sm text-slate-600 font-mono">{getQueryPreview(submission)}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(submission.status)}`}>
-                      <span>{getStatusIcon(submission.status)}</span>
-                      {submission.status}
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(displayStatus)}`}>
+                      <span>{getStatusIcon(displayStatus)}</span>
+                      {displayStatus}
                       {submission.status === "REJECTED" && submission.rejection_reason && (
                         <span className="ml-1" title="Has rejection reason">ℹ️</span>
                       )}
@@ -281,18 +291,9 @@ export default function MySubmissions({ onClone }) {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleViewDetails(submission.id, submission.status)}
-                        disabled={submission.status !== "EXECUTED" && submission.status !== "FAILED" && submission.status !== "REJECTED"}
-                        className={`p-2 rounded-lg transition-colors ${
-                          submission.status === "EXECUTED" || submission.status === "FAILED" || submission.status === "REJECTED"
-                            ? "text-slate-600 hover:text-[#1a9d7c] hover:bg-slate-100"
-                            : "text-slate-300 cursor-not-allowed"
-                        }`}
-                        title={
-                          submission.status === "EXECUTED" || submission.status === "FAILED" || submission.status === "REJECTED"
-                            ? "View Details" 
-                            : "Only available for executed/failed/rejected submissions"
-                        }
+                        onClick={() => handleViewDetails(submission.id, displayStatus)}
+                        className="p-2 text-slate-600 hover:text-[#1a9d7c] hover:bg-slate-100 rounded-lg transition-colors"
+                        title="View Details"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
@@ -311,7 +312,7 @@ export default function MySubmissions({ onClone }) {
                     </div>
                   </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         )}
@@ -492,6 +493,22 @@ export default function MySubmissions({ onClone }) {
                 </div>
               )}
 
+              {/* Pending Status Message */}
+              {selectedSubmission.status === "PENDING" && (
+                <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-yellow-600">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <label className="text-sm font-semibold text-yellow-700 uppercase tracking-wider">Awaiting Approval</label>
+                  </div>
+                  <p className="text-sm text-yellow-800">
+                    This request is pending manager approval and has not been executed yet. 
+                    You will be notified once it's approved and executed.
+                  </p>
+                </div>
+              )}
+
               {/* Execution Details */}
               {selectedSubmission.execution && (
                 <div className="border-t border-slate-200 pt-6">
@@ -594,19 +611,6 @@ export default function MySubmissions({ onClone }) {
                   )}
                 </div>
               )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowDetailsModal(false);
-                  setSelectedSubmission(null);
-                }}
-                className="px-6 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-100 transition-all"
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>

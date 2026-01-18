@@ -101,13 +101,15 @@ exports.cloneSubmission = async (req, res) => {
   const sourceId = Number(req.params.id);
   const userId = req.user.id;
 
-  const client = await submissionsDAL.getClient();
+  const { getORM } = require('../config/orm');
+  const orm = await getORM();
+  const em = orm.em.fork();
 
   try {
-    await submissionsDAL.beginTransaction(client);
+    await submissionsDAL.beginTransaction(em);
 
     const newRequestId = await submissionsDAL.cloneSubmission(
-      client,
+      em,
       sourceId,
       userId
     );
@@ -116,15 +118,15 @@ exports.cloneSubmission = async (req, res) => {
       throw new Error('Submission not found');
     }
 
-    await submissionsDAL.cloneQuery(client, sourceId, newRequestId);
-    await submissionsDAL.cloneScript(client, sourceId, newRequestId);
+    await submissionsDAL.cloneQuery(em, sourceId, newRequestId);
+    await submissionsDAL.cloneScript(em, sourceId, newRequestId);
 
-    await submissionsDAL.commitTransaction(client);
+    await submissionsDAL.commitTransaction(em);
 
     res.status(201).json({ id: newRequestId });
 
   } catch (err) {
-    await submissionsDAL.rollbackTransaction(client);
+    await submissionsDAL.rollbackTransaction(em);
     res.status(500).json({ error: err.message });
   }
 };

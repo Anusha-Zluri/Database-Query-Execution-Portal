@@ -45,7 +45,7 @@ exports.logout = async (req, res) => {
     const decoded = jwt.decode(token);
     const expiresAt = new Date(decoded.exp * 1000); // Convert from seconds to milliseconds
     
-    // Add token to blacklist
+    // Add current token to blacklist
     await tokenBlacklistService.blacklistToken(token, userId, expiresAt);
     
     // Run cleanup of expired tokens (async, don't wait for it)

@@ -218,6 +218,12 @@ export default function SubmitRequests({ draftId, onDraftLoaded }) {
           return;
         }
         if (scriptFile) {
+          // Check if file is empty
+          if (scriptFile.size === 0) {
+            setError("The uploaded file is empty. Please upload a file with content.");
+            setLoading(false);
+            return;
+          }
           formDataToSend.append("script", scriptFile);
         }
         // If no new file but has clonedScriptInfo, the backend will use the existing script
@@ -265,13 +271,17 @@ export default function SubmitRequests({ draftId, onDraftLoaded }) {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.name.endsWith(".js")) {
-        setScriptFile(file);
-        setError("");
-      } else {
+      if (!file.name.endsWith(".js")) {
         setError("Please upload a .js file");
         setScriptFile(null);
         e.target.value = ""; // Clear the input
+      } else if (file.size === 0) {
+        setError("The selected file is empty. Please upload a file with content.");
+        setScriptFile(null);
+        e.target.value = ""; // Clear the input
+      } else {
+        setScriptFile(file);
+        setError("");
       }
     }
   };
@@ -472,6 +482,87 @@ export default function SubmitRequests({ draftId, onDraftLoaded }) {
                   height: Math.min(Math.max(120, (formData.content.split('\n').length + 1) * 24), 500) + 'px'
                 }}
               />
+              
+              {/* MongoDB Query Format Documentation */}
+              {selectedDbType === 'mongodb' && (
+                <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                    </svg>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-blue-900 mb-2">MongoDB Query Format</p>
+                      <p className="text-xs text-blue-800 mb-3">
+                        MongoDB queries must be valid JSON with <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono">collection</code> and <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono">operation</code> fields.
+                      </p>
+                      
+                      <div className="space-y-2 text-xs">
+                        <details className="group">
+                          <summary className="cursor-pointer text-blue-900 font-medium hover:text-blue-700 list-none flex items-center gap-1">
+                            <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            Read Operations
+                          </summary>
+                          <div className="mt-2 ml-5 space-y-1 text-blue-800">
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">find</code> - Find documents</div>
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">findOne</code> - Find single document</div>
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">countDocuments</code> - Count with filter</div>
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">distinct</code> - Get unique values</div>
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">aggregate</code> - Aggregation pipeline</div>
+                          </div>
+                        </details>
+
+                        <details className="group">
+                          <summary className="cursor-pointer text-blue-900 font-medium hover:text-blue-700 list-none flex items-center gap-1">
+                            <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            Write Operations
+                          </summary>
+                          <div className="mt-2 ml-5 space-y-1 text-blue-800">
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">insertOne</code> - Insert single document</div>
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">insertMany</code> - Insert multiple documents</div>
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">updateOne</code> - Update single document</div>
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">updateMany</code> - Update multiple documents</div>
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">replaceOne</code> - Replace entire document</div>
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">deleteOne</code> - Delete single document</div>
+                            <div>• <code className="bg-blue-100 px-1 rounded font-mono text-[11px]">deleteMany</code> - Delete multiple documents</div>
+                          </div>
+                        </details>
+
+                        <details className="group">
+                          <summary className="cursor-pointer text-blue-900 font-medium hover:text-blue-700 list-none flex items-center gap-1">
+                            <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            Example Queries
+                          </summary>
+                          <div className="mt-2 ml-5 space-y-2">
+                            <pre className="bg-blue-100 rounded p-2 text-[10px] overflow-x-auto text-blue-900 font-mono">{`{
+  "collection": "movies",
+  "operation": "insertOne",
+  "data": {
+    "title": "Inception",
+    "year": 2010
+  }
+}`}</pre>
+                            <pre className="bg-blue-100 rounded p-2 text-[10px] overflow-x-auto text-blue-900 font-mono">{`{
+  "collection": "users",
+  "operation": "updateMany",
+  "args": {
+    "filter": { "active": false },
+    "update": { "$set": { "status": "inactive" } }
+  }
+}`}</pre>
+                          </div>
+                        </details>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {formData.content.length > QUERY_CHAR_LIMIT * 0.95 && (
                 <p className="mt-1 text-xs text-red-600">
                   ⚠️ Character limit almost reached! {(QUERY_CHAR_LIMIT - formData.content.length).toLocaleString()} characters remaining.
@@ -600,6 +691,26 @@ export default function SubmitRequests({ draftId, onDraftLoaded }) {
               <p className="text-white font-medium">Node.js Scripts (.js)</p>
             </div>
 
+            {/* Required Format */}
+            <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-3">
+              <p className="text-blue-300 font-semibold text-xs mb-2">✅ REQUIRED FORMAT</p>
+              <ul className="text-xs text-blue-200 space-y-1">
+                <li>• Export an async function</li>
+                <li>• Return <code className="bg-blue-900/50 px-1 rounded">{'{ rowCount, rows }'}</code></li>
+                <li>• Use <code className="bg-blue-900/50 px-1 rounded">await</code> for async operations</li>
+              </ul>
+            </div>
+
+            {/* Available Context */}
+            <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-3">
+              <p className="text-green-300 font-semibold text-xs mb-2">📦 AVAILABLE IN CONTEXT</p>
+              <ul className="text-xs text-green-200 space-y-1">
+                <li>• <code className="bg-green-900/50 px-1 rounded">db</code> - Database object</li>
+                <li>• <code className="bg-green-900/50 px-1 rounded">utils.sleep(ms)</code> - Async sleep</li>
+                <li>• <code className="bg-green-900/50 px-1 rounded">utils.now()</code> - Current date</li>
+              </ul>
+            </div>
+
             <div>
               <p className="text-white font-medium mb-2">PostgreSQL Example:</p>
               <pre className="bg-slate-800 rounded-lg p-3 text-xs overflow-x-auto border border-slate-700 text-slate-300">
@@ -647,6 +758,41 @@ export default function SubmitRequests({ draftId, onDraftLoaded }) {
   };
 };`}
               </pre>
+            </div>
+
+            {/* MongoDB Specific Notes */}
+            {selectedDbType === 'mongodb' && (
+              <div className="bg-yellow-900/30 border border-yellow-700/50 rounded-lg p-3">
+                <p className="text-yellow-300 font-semibold text-xs mb-2">⚠️ MONGODB NOTES</p>
+                <ul className="text-xs text-yellow-200 space-y-1.5">
+                  <li>• Use <code className="bg-yellow-900/50 px-1 rounded">db.collection('name')</code> to get collection</li>
+                  <li>• <code className="bg-yellow-900/50 px-1 rounded">find()</code> returns cursor - must call <code className="bg-yellow-900/50 px-1 rounded">.toArray()</code></li>
+                  <li>• Same for <code className="bg-yellow-900/50 px-1 rounded">aggregate()</code> and <code className="bg-yellow-900/50 px-1 rounded">listIndexes()</code></li>
+                  <li>• All MongoDB operations supported: insertOne, updateMany, deleteOne, etc.</li>
+                  <li>• No <code className="bg-yellow-900/50 px-1 rounded">require()</code> - use built-in JavaScript only</li>
+                </ul>
+              </div>
+            )}
+
+            {/* Common Mistakes */}
+            <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3">
+              <p className="text-red-300 font-semibold text-xs mb-2">❌ COMMON MISTAKES</p>
+              <div className="text-xs text-red-200 space-y-2">
+                <div>
+                  <p className="font-medium mb-1">Forgetting .toArray():</p>
+                  <code className="block bg-red-900/50 px-2 py-1 rounded text-[10px]">
+                    // ❌ const docs = await col.find({'{}'});<br/>
+                    // ✅ const docs = await col.find({'{}'}).toArray();
+                  </code>
+                </div>
+                <div>
+                  <p className="font-medium mb-1">Wrong return format:</p>
+                  <code className="block bg-red-900/50 px-2 py-1 rounded text-[10px]">
+                    // ❌ return docs;<br/>
+                    // ✅ return {'{ rowCount: docs.length, rows: docs }'};
+                  </code>
+                </div>
+              </div>
             </div>
           </div>
         </div>

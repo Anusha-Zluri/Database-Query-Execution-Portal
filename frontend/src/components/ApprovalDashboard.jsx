@@ -207,6 +207,25 @@ export default function ApprovalDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* COMMENTED OUT: Risk Detection Advisory - No longer using risk detection */}
+      {/*
+      <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg">
+        <div className="flex items-start gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-amber-900 mb-1">Risk Detection Advisory</h3>
+            <p className="text-sm text-amber-800">
+              Automated risk detection is <strong>advisory only</strong> and may not catch all dangerous operations. 
+              Please <strong>carefully review all requests</strong> regardless of risk level before approving. 
+              When in doubt, reject and request clarification.
+            </p>
+          </div>
+        </div>
+      </div>
+      */}
+
       {/* Filters Bar */}
       <div className="bg-white border border-slate-200 rounded-xl p-4">
         <div className="flex items-center gap-4 flex-wrap">
@@ -314,13 +333,13 @@ export default function ApprovalDashboard() {
           <div className="overflow-x-auto">
             <table className="w-full table-fixed">
               <colgroup>
-                <col className="w-[18%]" /> {/* Database */}
-                <col className="w-[6%]" />  {/* ID */}
-                <col className="w-[22%]" /> {/* Request */}
-                <col className="w-[14%]" /> {/* User */}
-                <col className="w-[7%]" />  {/* POD */}
-                <col className="w-[10%]" /> {/* Status */}
-                <col className="w-[23%]" /> {/* Comments */}
+                <col className="w-[18%]" />
+                <col className="w-[6%]" />
+                <col className="w-[22%]" />
+                <col className="w-[14%]" />
+                <col className="w-[7%]" />
+                <col className="w-[10%]" />
+                <col className="w-[23%]" />
               </colgroup>
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
@@ -351,11 +370,7 @@ export default function ApprovalDashboard() {
                 {filteredApprovals.map((approval) => (
                   <tr 
                     key={approval.id} 
-                    className={`transition-colors ${
-                      approval.risk_level === 'HIGH' && approval.has_dangerous_ops
-                        ? 'bg-red-50 hover:bg-red-100'
-                        : 'hover:bg-slate-50'
-                    }`}
+                    className="transition-colors hover:bg-slate-50"
                   >
                     <td className="px-4 py-4 text-sm text-slate-900 font-medium truncate">
                       {approval.database}
@@ -378,13 +393,13 @@ export default function ApprovalDashboard() {
                           </span>
                         )}
                         
-                        {/* Risk Warning Icon */}
+                        {/* COMMENTED OUT: Risk Warning Icon - No longer using risk detection */}
+                        {/*
                         {approval.risk_level === 'HIGH' && approval.has_dangerous_ops && (
                           <div className="relative group flex-shrink-0">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-red-600">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                             </svg>
-                            {/* Tooltip */}
                             <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-10 pointer-events-none">
                               <div className="bg-slate-900 text-white text-xs rounded-lg py-2 px-3 whitespace-nowrap shadow-lg">
                                 ⚠️ High Risk - Contains dangerous operations
@@ -395,6 +410,7 @@ export default function ApprovalDashboard() {
                             </div>
                           </div>
                         )}
+                        */}
                         
                         <button
                           onClick={() => handleViewContent(approval)}
@@ -685,7 +701,8 @@ export default function ApprovalDashboard() {
 
             {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-6">
-              {/* Risk Warning */}
+              {/* COMMENTED OUT: Risk Warning - No longer using risk detection */}
+              {/*
               {viewModal.metadata.risk_level === 'HIGH' && viewModal.metadata.has_dangerous_ops && (
                 <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5">
@@ -701,6 +718,7 @@ export default function ApprovalDashboard() {
                   </div>
                 </div>
               )}
+              */}
               
               <div className="bg-slate-900 rounded-lg p-4 max-h-96 overflow-auto">
                 <pre className="text-sm text-slate-100 font-mono whitespace-pre-wrap break-words">

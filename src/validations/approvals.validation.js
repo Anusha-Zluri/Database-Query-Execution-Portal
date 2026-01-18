@@ -8,9 +8,12 @@ const getApprovalsQuerySchema = z.object({
     .refine(val => val > 0, 'Page must be greater than 0')
     .optional(),
   limit: z.string()
-    .regex(/^\d+$/, 'Limit must be a number')
-    .transform(Number)
-    .refine(val => val > 0 && val <= 100, 'Limit must be between 1 and 100')
+    .transform(val => {
+      const num = Number(val);
+      if (isNaN(num)) throw new Error('Limit must be a number');
+      return num;
+    })
+    .refine(val => val >= 1 && val <= 500, 'Limit must be between 1 and 500')
     .optional(),
   status: z.enum(['PENDING', 'APPROVED', 'REJECTED'], {
     errorMap: () => ({ message: 'Status must be PENDING, APPROVED, or REJECTED' })

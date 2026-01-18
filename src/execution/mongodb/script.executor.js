@@ -7,54 +7,48 @@ module.exports = async function executeMongoScript(request, instance) {
     throw new Error('Script code missing for execution');
   }
 
-  const client = new MongoClient(instance.baseUrl);
+  if (!request.db_name) {
+    throw new Error('Database name missing for Mongo execution');
+  }
+
+  const client = new MongoClient(instance.baseUrl, {
+    maxPoolSize: 1,        // predictable resource usage
+    serverSelectionTimeoutMS: 5000,
+  });
+
   await client.connect();
 
   try {
-    // Force DB name from request (no guessing inside executor)
-    const dbName = request.db_name;
-    if (!dbName) {
-      throw new Error('Database name missing for Mongo execution');
-    }
-
-    const db = client.db(dbName);
-
-    if (typeof db.collection !== 'function') {
-      throw new Error(`Failed to initialize Mongo database "${dbName}"`);
-    }
+    const db = client.db(request.db_name);
 
     /**
-     * mongo.find('users', { age: { $gt: 18 } })
-     * mongo.insertOne('users', { name: 'A' })
+     * IMPORTANT:
+     * We expose the REAL MongoDB API.
+     * If Mongo supports it, the user script supports it.
      */
-    const mongo = new Proxy({}, {
-      get: (_, operation) => {
-        return async (collectionName, ...args) => {
-          const col = db.collection(collectionName);
+    const context = {
+      db,
+      utils
+    };
 
-          if (typeof col[operation] !== 'function') {
-            throw new Error(`Unsupported Mongo operation: ${operation}`);
-          }
-
-          if (operation === 'find') {
-            return col.find(...args).toArray();
-          }
-
-          return col[operation](...args);
-        };
-      }
-    });
-
-    return await runUserScript({
+    /**
+     * User script MUST export an async function
+     * returning { rowCount, rows }
+     */
+    const result = await runUserScript({
       scriptCode: request.script_text,
-      context: {
-        db,
-        mongo,
-        utils
-      },
-      timeoutMs: 3000
+      context,
+      timeoutMs: 10000,  // Increased to 10 seconds for database operations
     });
 
+    return result;
+  } catch (err) {
+    /**
+     * Let the caller handle Slack notifications.
+     * Preserve stack trace.
+     */
+    err.message = `Mongo execution failed: ${err.message}`;
+    throw err;
   } finally {
     await client.close();
   }

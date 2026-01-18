@@ -59,7 +59,7 @@ async function executePostgresQuery(request, instance) {
 ============================================================ */
 async function executeMongoQuery(request, instance) {
   const payload = JSON.parse(request.query_text);
-  const { collection, operation, args = {} } = payload;
+  const { collection, operation, args = {}, data } = payload;
 
   const client = new MongoClient(instance.baseUrl);
   await client.connect();
@@ -67,6 +67,7 @@ async function executeMongoQuery(request, instance) {
   try {
     const col = client.db(request.db_name).collection(collection);
 
+    // Handle find operation
     if (operation === 'find') {
       const docs = await col.find(args.filter || {}).toArray();
       return {
@@ -75,9 +76,280 @@ async function executeMongoQuery(request, instance) {
       };
     }
 
+    // Handle findOne
+    if (operation === 'findOne') {
+      const doc = await col.findOne(args.filter || {});
+      return {
+        rowCount: doc ? 1 : 0,
+        rows: doc ? [doc] : []
+      };
+    }
+
+    // Handle countDocuments
+    if (operation === 'countDocuments') {
+      const count = await col.countDocuments(args.filter || {});
+      return {
+        rowCount: 1,
+        rows: [{ count }]
+      };
+    }
+
+    // Handle estimatedDocumentCount
+    if (operation === 'estimatedDocumentCount') {
+      const count = await col.estimatedDocumentCount();
+      return {
+        rowCount: 1,
+        rows: [{ count }]
+      };
+    }
+
+    // Handle distinct
+    if (operation === 'distinct') {
+      const field = args.field || args.key;
+      const filter = args.filter || {};
+      const values = await col.distinct(field, filter);
+      return {
+        rowCount: values.length,
+        rows: values.map(v => ({ value: v }))
+      };
+    }
+
+    // Handle insertOne - accepts either "data" or "args.document"
+    if (operation === 'insertOne') {
+      const document = data || args.document || args;
+      const result = await col.insertOne(document);
+      return {
+        rowCount: result.acknowledged ? 1 : 0,
+        rows: [{ insertedId: result.insertedId, acknowledged: result.acknowledged }]
+      };
+    }
+
+    // Handle insertMany - accepts either "data" or "args.documents"
+    if (operation === 'insertMany') {
+      const documents = data || args.documents || args;
+      const result = await col.insertMany(documents);
+      return {
+        rowCount: result.insertedCount || 0,
+        rows: [{ insertedIds: result.insertedIds, insertedCount: result.insertedCount }]
+      };
+    }
+
+    // Handle updateOne
+    if (operation === 'updateOne') {
+      const filter = args.filter || {};
+      const update = args.update || {};
+      const options = args.options || {};
+      const result = await col.updateOne(filter, update, options);
+      return {
+        rowCount: result.modifiedCount || 0,
+        rows: [{ 
+          matchedCount: result.matchedCount,
+          modifiedCount: result.modifiedCount,
+          upsertedId: result.upsertedId,
+          upsertedCount: result.upsertedCount,
+          acknowledged: result.acknowledged
+        }]
+      };
+    }
+
+    // Handle updateMany
+    if (operation === 'updateMany') {
+      const filter = args.filter || {};
+      const update = args.update || {};
+      const options = args.options || {};
+      const result = await col.updateMany(filter, update, options);
+      return {
+        rowCount: result.modifiedCount || 0,
+        rows: [{ 
+          matchedCount: result.matchedCount,
+          modifiedCount: result.modifiedCount,
+          upsertedId: result.upsertedId,
+          upsertedCount: result.upsertedCount,
+          acknowledged: result.acknowledged
+        }]
+      };
+    }
+
+    // Handle replaceOne
+    if (operation === 'replaceOne') {
+      const filter = args.filter || {};
+      const replacement = args.replacement || data || {};
+      const options = args.options || {};
+      const result = await col.replaceOne(filter, replacement, options);
+      return {
+        rowCount: result.modifiedCount || 0,
+        rows: [{ 
+          matchedCount: result.matchedCount,
+          modifiedCount: result.modifiedCount,
+          upsertedId: result.upsertedId,
+          acknowledged: result.acknowledged
+        }]
+      };
+    }
+
+    // Handle deleteOne
+    if (operation === 'deleteOne') {
+      const filter = args.filter || args || {};
+      const result = await col.deleteOne(filter);
+      return {
+        rowCount: result.deletedCount || 0,
+        rows: [{ deletedCount: result.deletedCount, acknowledged: result.acknowledged }]
+      };
+    }
+
+    // Handle deleteMany
+    if (operation === 'deleteMany') {
+      const filter = args.filter || args || {};
+      const result = await col.deleteMany(filter);
+      return {
+        rowCount: result.deletedCount || 0,
+        rows: [{ deletedCount: result.deletedCount, acknowledged: result.acknowledged }]
+      };
+    }
+
+    // Handle findOneAndUpdate
+    if (operation === 'findOneAndUpdate') {
+      const filter = args.filter || {};
+      const update = args.update || {};
+      const options = args.options || { returnDocument: 'after' };
+      const result = await col.findOneAndUpdate(filter, update, options);
+      return {
+        rowCount: result.value ? 1 : 0,
+        rows: result.value ? [result.value] : []
+      };
+    }
+
+    // Handle findOneAndReplace
+    if (operation === 'findOneAndReplace') {
+      const filter = args.filter || {};
+      const replacement = args.replacement || data || {};
+      const options = args.options || { returnDocument: 'after' };
+      const result = await col.findOneAndReplace(filter, replacement, options);
+      return {
+        rowCount: result.value ? 1 : 0,
+        rows: result.value ? [result.value] : []
+      };
+    }
+
+    // Handle findOneAndDelete
+    if (operation === 'findOneAndDelete') {
+      const filter = args.filter || args || {};
+      const options = args.options || {};
+      const result = await col.findOneAndDelete(filter, options);
+      return {
+        rowCount: result.value ? 1 : 0,
+        rows: result.value ? [result.value] : []
+      };
+    }
+
+    // Handle bulkWrite
+    if (operation === 'bulkWrite') {
+      const operations = args.operations || args || [];
+      const options = args.options || {};
+      const result = await col.bulkWrite(operations, options);
+      return {
+        rowCount: result.modifiedCount + result.insertedCount + result.deletedCount,
+        rows: [{
+          insertedCount: result.insertedCount,
+          matchedCount: result.matchedCount,
+          modifiedCount: result.modifiedCount,
+          deletedCount: result.deletedCount,
+          upsertedCount: result.upsertedCount,
+          insertedIds: result.insertedIds,
+          upsertedIds: result.upsertedIds
+        }]
+      };
+    }
+
+    // Handle aggregate
+    if (operation === 'aggregate') {
+      const pipeline = args.pipeline || args || [];
+      const options = args.options || {};
+      const docs = await col.aggregate(pipeline, options).toArray();
+      return {
+        rowCount: docs.length,
+        rows: docs
+      };
+    }
+
+    // Handle createIndex
+    if (operation === 'createIndex') {
+      const keys = args.keys || args.index || args;
+      const options = args.options || {};
+      const indexName = await col.createIndex(keys, options);
+      return {
+        rowCount: 1,
+        rows: [{ indexName, created: true }]
+      };
+    }
+
+    // Handle createIndexes
+    if (operation === 'createIndexes') {
+      const indexes = args.indexes || args || [];
+      const result = await col.createIndexes(indexes);
+      return {
+        rowCount: result.length || 0,
+        rows: [{ indexNames: result, created: true }]
+      };
+    }
+
+    // Handle dropIndex
+    if (operation === 'dropIndex') {
+      const indexName = args.indexName || args.name || args;
+      await col.dropIndex(indexName);
+      return {
+        rowCount: 1,
+        rows: [{ indexName, dropped: true }]
+      };
+    }
+
+    // Handle dropIndexes
+    if (operation === 'dropIndexes') {
+      await col.dropIndexes();
+      return {
+        rowCount: 1,
+        rows: [{ dropped: 'all indexes' }]
+      };
+    }
+
+    // Handle listIndexes
+    if (operation === 'listIndexes') {
+      const indexes = await col.listIndexes().toArray();
+      return {
+        rowCount: indexes.length,
+        rows: indexes
+      };
+    }
+
+    // Handle rename
+    if (operation === 'rename') {
+      const newName = args.newName || args.name || args;
+      const options = args.options || {};
+      const result = await col.rename(newName, options);
+      return {
+        rowCount: 1,
+        rows: [{ renamed: true, newName }]
+      };
+    }
+
+    // Handle drop
+    if (operation === 'drop') {
+      const result = await col.drop();
+      return {
+        rowCount: 1,
+        rows: [{ dropped: true }]
+      };
+    }
+
+    // Handle watch (change streams) - limited support
+    if (operation === 'watch') {
+      throw new Error('Change streams (watch) are not supported in query mode. Use scripts instead.');
+    }
+
+    // Generic fallback for other operations
     const result = await col[operation](...Object.values(args));
     return {
-      rowCount: result?.modifiedCount ?? 0,
+      rowCount: result?.modifiedCount ?? result?.deletedCount ?? 0,
       rows: []
     };
   } finally {
@@ -274,7 +546,9 @@ const downloadExecutionResults = async (req, res) => {
 module.exports = {
   executeRequest,
   executeRequestInternal,
-  downloadExecutionResults
+  downloadExecutionResults,
+  sendExecutionSuccessNotification,
+  sendExecutionFailureNotification
 };
 
 /* ================= SLACK NOTIFICATION HELPERS ================= */

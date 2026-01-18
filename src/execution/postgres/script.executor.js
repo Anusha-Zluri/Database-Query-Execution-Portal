@@ -31,7 +31,7 @@ module.exports = async function executePostgresScript(request, instance) {
         db,
         utils
       },
-      timeoutMs: 3000
+      timeoutMs: 10000  // Increased to 10 seconds for database operations
     });
   } finally {
     await pool.end();

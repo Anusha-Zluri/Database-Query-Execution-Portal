@@ -7,57 +7,170 @@ const { pool } = require('../config/db');
 
 /* ================= SCRIPT ANALYSIS ================= */
 
+// COMMENTED OUT: Risk detection can be bypassed and gives false confidence
+// Better to rely on manual approval process only
+/*
 function analyzeScript(content) {
   const upper = content.toUpperCase();
+  const lower = content.toLowerCase();
 
+  // Be overly cautious - false positives are okay, false negatives are bad
   const dangerousPatterns = [
-    'EVAL(',
-    'CHILD_PROCESS',
-    'PROCESS.',
-    'REQUIRE(',
-    'FS.',
-    'NET.',
-    'SPAWN(',
-    'EXEC('
+    // Node.js APIs that shouldn't be accessible
+    'EVAL', 'REQUIRE', 'IMPORT', 'PROCESS', 'CHILD_PROCESS',
+    'EXEC', 'SPAWN', 'FORK',
+    
+    // File system access
+    'FS.', 'READFILE', 'WRITEFILE', 'UNLINK', 'RMDIR',
+    
+    // Network access
+    'NET.', 'HTTP.', 'HTTPS.', 'FETCH', 'AXIOS',
+    
+    // Dangerous operations
+    '__DIRNAME', '__FILENAME', 'GLOBAL.', 'CONSTRUCTOR',
+    
+    // Potential obfuscation attempts
+    'FROMCHARCODE', 'ATOB', 'BTOA',
+    
+    // Dynamic property access patterns
+    'GLOBAL[', 'PROCESS[', 'THIS[',
   ];
 
-  const hasDangerousApis = dangerousPatterns.some(p =>
-    upper.includes(p)
-  );
+  // Check for dangerous patterns (case-insensitive)
+  const hasDangerousApis = dangerousPatterns.some(pattern => {
+    return upper.includes(pattern) || lower.includes(pattern.toLowerCase());
+  });
+
+  // Additional heuristics for suspicious code
+  const suspiciousPatterns = [
+    /require\s*\(/i,           // require with any spacing
+    /eval\s*\(/i,              // eval with any spacing
+    /Function\s*\(/i,          // Function constructor
+    /\[\s*['"]constructor['"]\s*\]/i,  // Accessing constructor
+    /process\s*\./i,           // process object access
+    /process\s*\[/i,           // process bracket notation
+    /global\s*\./i,            // global object access
+    /global\s*\[/i,            // global bracket notation
+    /child_process/i,          // child_process module
+    /fs\s*\./i,                // fs module
+    /\.exec\s*\(/i,            // .exec() calls
+    /\.spawn\s*\(/i,           // .spawn() calls
+    /\[\s*['"]require['"]\s*\]/i,  // Bracket notation require
+    /String\s*\.\s*fromCharCode/i,  // String obfuscation
+  ];
+
+  const hasSuspiciousCode = suspiciousPatterns.some(regex => regex.test(content));
 
   return {
     lineCount: content.split('\n').length,
-    hasDangerousApis,
-    riskLevel: hasDangerousApis ? 'HIGH' : 'LOW'
+    hasDangerousApis: hasDangerousApis || hasSuspiciousCode,
+    riskLevel: (hasDangerousApis || hasSuspiciousCode) ? 'HIGH' : 'LOW'
+  };
+}
+*/
+
+// Simplified analysis - just count lines, no risk detection
+function analyzeScript(content) {
+  return {
+    lineCount: content.split('\n').length,
+    hasDangerousApis: false,  // Always false - no risk detection
+    riskLevel: 'LOW'          // Always low - rely on manual approval
   };
 }
 
 /* ================= QUERY ANALYSIS ================= */
 
+// COMMENTED OUT: Risk detection can be bypassed and gives false confidence
+// Better to rely on manual approval process only
+/*
 function analyzeQuery(content, engine) {
   const upper = content.toUpperCase();
-  let dangerousPatterns = [];
   let hasDangerousOps = false;
 
   if (engine === 'postgres') {
-    dangerousPatterns = [
-      'DROP ',
-      'TRUNCATE ',
-      'DELETE ',
-      'ALTER ',
-      'CREATE ',
-      'GRANT ',
-      'REVOKE '
+    // Be overly cautious - catch variations with regex
+    const dangerousPatterns = [
+      /DROP\s+/i,              // DROP with any whitespace
+      /TRUNCATE\s+/i,          // TRUNCATE with any whitespace
+      /DELETE\s+/i,            // DELETE (even with WHERE clause)
+      /ALTER\s+/i,             // ALTER TABLE/DATABASE
+      /CREATE\s+/i,            // CREATE TABLE/INDEX/etc
+      /GRANT\s+/i,             // GRANT permissions
+      /REVOKE\s+/i,            // REVOKE permissions
+      /EXECUTE\s+/i,           // EXECUTE dynamic SQL
+      /EXEC\s+/i,              // EXEC (SQL Server style)
+      /CALL\s+/i,              // CALL stored procedures
+      /DO\s+\$\$/i,            // DO blocks (PostgreSQL)
+      /COPY\s+/i,              // COPY command
+      /VACUUM\s+/i,            // VACUUM
+      /REINDEX\s+/i,           // REINDEX
+      /CLUSTER\s+/i,           // CLUSTER
+      /LOCK\s+/i,              // LOCK TABLE
+      /COMMENT\s+ON/i,         // COMMENT ON
+      /;\s*DROP/i,             // Multiple statements with DROP
+      /;\s*DELETE/i,           // Multiple statements with DELETE
+      /;\s*TRUNCATE/i,         // Multiple statements with TRUNCATE
+      /--.*DROP/i,             // Comments with DROP
+      /\/\*.*DROP.*\*\//i,     // Block comments with DROP
+      /CHR\s*\(/i,             // CHR() function (obfuscation)
+      /CONCAT\s*\(/i,          // CONCAT (string building)
+      /\|\|/,                  // String concatenation operator
     ];
-    hasDangerousOps = dangerousPatterns.some(p => upper.includes(p));
+
+    hasDangerousOps = dangerousPatterns.some(regex => regex.test(content));
+
+    // Additional check: multiple statements (semicolons)
+    const statementCount = (content.match(/;/g) || []).length;
+    if (statementCount > 1) {
+      hasDangerousOps = true; // Multiple statements are risky
+    }
+
+    // Check for function calls that might be dangerous
+    if (/SELECT\s+\w+\s*\(/i.test(content) && upper.includes('DROP')) {
+      hasDangerousOps = true; // Function call with DROP keyword
+    }
+
   } else if (engine === 'mongodb') {
     // For MongoDB, check JSON operations
     try {
       const parsed = JSON.parse(content);
-      const dangerousOps = ['drop', 'dropDatabase', 'deleteMany', 'deleteOne', 'remove', 'createCollection', 'createIndex'];
+      
+      // Dangerous operations - be comprehensive
+      const dangerousOps = [
+        'drop', 'dropDatabase', 'dropCollection',
+        'deleteMany', 'deleteOne', 'remove',
+        'createCollection', 'createIndex', 'createIndexes',
+        'dropIndex', 'dropIndexes',
+        'rename', 'renameCollection',
+        'updateMany', 'replaceOne',  // Can affect many documents
+        'bulkWrite',  // Batch operations
+        'aggregate',  // Can have $out or $merge stages
+      ];
+      
       hasDangerousOps = dangerousOps.includes(parsed.operation);
+
+      // Check for dangerous operators in args (deep search)
+      const jsonStr = JSON.stringify(parsed).toUpperCase();
+      const dangerousOperators = [
+        '$WHERE',      // JavaScript execution
+        '$FUNCTION',   // Custom functions
+        '$ACCUMULATOR', // Custom accumulators
+        '$OUT',        // Write to collection
+        '$MERGE',      // Merge to collection
+        '$EXPR',       // Expression (can contain $function)
+      ];
+      
+      if (dangerousOperators.some(op => jsonStr.includes(op))) {
+        hasDangerousOps = true;
+      }
+
+      // Check for nested dangerous operations in arrays/objects
+      if (jsonStr.includes('FUNCTION') || jsonStr.includes('CODE')) {
+        hasDangerousOps = true;
+      }
+
     } catch {
-      // If not valid JSON, mark as risky
+      // If not valid JSON, mark as risky (better safe than sorry)
       hasDangerousOps = true;
     }
   }
@@ -65,6 +178,15 @@ function analyzeQuery(content, engine) {
   return {
     hasDangerousOps,
     riskLevel: hasDangerousOps ? 'HIGH' : 'LOW'
+  };
+}
+*/
+
+// Simplified analysis - no risk detection
+function analyzeQuery(content, engine) {
+  return {
+    hasDangerousOps: false,  // Always false - no risk detection
+    riskLevel: 'LOW'         // Always low - rely on manual approval
   };
 }
 
