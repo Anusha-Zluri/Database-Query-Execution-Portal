@@ -117,19 +117,32 @@ exports.getApprovalScriptPreview = async (req, res) => {
       return res.status(400).json({ message: 'Invalid request id' });
     }
 
-    const scriptPath =
-      await approvalsDAL.getScriptPathForApproval(requestId, managerId);
+    const scriptData =
+      await approvalsDAL.getScriptForApproval(requestId, managerId);
 
-    if (!scriptPath) {
+    if (!scriptData) {
       return res.status(404).json({
         message: 'Script not found or not authorized'
       });
     }
 
-    const content = await fs.readFile(
-      path.resolve(scriptPath),
-      'utf-8'
-    );
+    // Try to get content from DB first, fallback to file if needed
+    let content = scriptData.script_content;
+    
+    if (!content && scriptData.file_path) {
+      try {
+        content = await fs.readFile(
+          path.resolve(scriptData.file_path),
+          'utf-8'
+        );
+      } catch (err) {
+        return res.status(404).json({ message: 'Script file not available on this server' });
+      }
+    }
+
+    if (!content) {
+      return res.status(404).json({ message: 'Script content not available' });
+    }
 
     res.json({ requestId, preview: content });
   } catch (err) {

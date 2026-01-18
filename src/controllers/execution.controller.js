@@ -41,6 +41,7 @@ async function executePostgresQuery(request, instance) {
 
   const execPool = new Pool({
     connectionString: url.toString()
+
   });
 
   try {
@@ -379,8 +380,22 @@ async function executeRequestInternal(requestId) {
     if (request.request_type === 'QUERY') {
       request.query_text = await executionDAL.loadQueryText(client, requestId);
     } else {
-      const filePath = await executionDAL.loadScriptPath(client, requestId);
-      request.script_text = await fs.readFile(filePath, 'utf-8');
+      // Load script content from DB (survives Render restarts)
+      const scriptData = await executionDAL.loadScriptContent(client, requestId);
+      
+      if (scriptData?.script_content) {
+        // Use content from DB
+        request.script_text = scriptData.script_content;
+      } else if (scriptData?.file_path) {
+        // Fallback to file if DB content is missing
+        try {
+          request.script_text = await fs.readFile(scriptData.file_path, 'utf-8');
+        } catch (err) {
+          throw new Error('Script file not found and no database backup available');
+        }
+      } else {
+        throw new Error('Script content not available');
+      }
     }
 
     const instance = instanceRegistry[request.db_instance];
@@ -391,7 +406,7 @@ async function executeRequestInternal(requestId) {
     executionId = await executionDAL.createExecution(client, requestId);
     startTime = Date.now();
 
-    // 🔓 Make execution row durable
+    // Locks Make execution row durable
     await executionDAL.commitTransaction(client);
 
     /* ===============================

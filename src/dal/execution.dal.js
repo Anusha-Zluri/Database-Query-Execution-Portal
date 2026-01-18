@@ -20,7 +20,7 @@ async function lockApprovedRequest(em, requestId) {
     SELECT id, request_type, db_instance, db_name
     FROM requests
     WHERE id = ? AND status = 'APPROVED'
-    FOR UPDATE
+    FOR UPDATE  
     `,
     [requestId]
   );
@@ -34,6 +34,14 @@ async function loadQueryText(em, requestId) {
     [requestId]
   );
   return result.rows && result.rows.length > 0 ? result.rows[0].query_text : null;
+}
+
+async function loadScriptContent(em, requestId) {
+  const result = await em.getKnex().raw(
+    `SELECT file_path, script_content FROM request_scripts WHERE request_id = ?`,
+    [requestId]
+  );
+  return result.rows && result.rows.length > 0 ? result.rows[0] : null;
 }
 
 async function loadScriptPath(em, requestId) {
@@ -201,6 +209,7 @@ module.exports = {
   lockApprovedRequest,
   loadQueryText,
   loadScriptPath,
+  loadScriptContent,
   createExecution,
   markExecutionSuccess,
   markExecutionFailure,

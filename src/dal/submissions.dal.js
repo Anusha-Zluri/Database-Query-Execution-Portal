@@ -185,6 +185,7 @@ async function getSubmissionDetails(submissionId, userId) {
 
       rq.query_text,
       rs.file_path,
+      rs.script_content,
 
       e.id            AS exec_id,
       e.status        AS exec_status,

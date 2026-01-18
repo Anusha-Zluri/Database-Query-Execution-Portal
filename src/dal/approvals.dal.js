@@ -139,6 +139,24 @@ async function getPendingApprovals(managerId, filters = {}) {
 
 /* ================= SCRIPT PREVIEW ================= */
 
+async function getScriptForApproval(requestId, managerId) {
+  const { rows } = await pool.query(
+    `
+    SELECT rs.file_path, rs.script_content
+    FROM requests r
+    JOIN pods p ON p.id = r.pod_id
+    JOIN request_scripts rs ON rs.request_id = r.id
+    WHERE r.id = $1
+      AND r.status = 'PENDING'
+      AND p.manager_user_id = $2
+    `,
+    [requestId, managerId]
+  );
+
+  return rows[0] || null;
+}
+
+// Keep old function for backward compatibility
 async function getScriptPathForApproval(requestId, managerId) {
   const { rows } = await pool.query(
     `
@@ -220,6 +238,7 @@ async function getRequestDetailsForRejection(requestId) {
 
 module.exports = {
   getPendingApprovals,
+  getScriptForApproval,
   getScriptPathForApproval,
   approveRequest,
   rejectRequest,

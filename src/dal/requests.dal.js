@@ -7,7 +7,7 @@ function getClient() {
 }
 
 /* ================= REQUEST ================= */
-
+//store into the requests table
 async function insertRequest(
   client,
   {
@@ -46,6 +46,8 @@ async function insertRequest(
   return rows[0].id;
 }
 
+
+
 async function insertQueryRequest(client, requestId, queryText, analysis = {}) {
   await client.query(
     `
@@ -71,6 +73,7 @@ async function insertScriptRequest(
   {
     requestId,
     filePath,
+    scriptContent,
     lineCount,
     riskLevel,
     hasDangerousApis
@@ -81,15 +84,17 @@ async function insertScriptRequest(
     INSERT INTO request_scripts (
       request_id,
       file_path,
+      script_content,
       line_count,
       risk_level,
       has_dangerous_apis
     )
-    VALUES ($1, $2, $3, $4, $5)
+    VALUES ($1, $2, $3, $4, $5, $6)
     `,
     [
       requestId,
       filePath,
+      scriptContent,
       lineCount,
       riskLevel,
       hasDangerousApis
@@ -135,6 +140,23 @@ async function rejectRequest(requestId, managerUserId) {
 
 /* ================= SCRIPT REVIEW ================= */
 
+async function getScriptForApproval(requestId, managerUserId) {
+  const { rows } = await pool.query(
+    `
+    SELECT rs.file_path, rs.script_content
+    FROM request_scripts rs
+    JOIN requests r ON r.id = rs.request_id
+    JOIN pods p ON p.id = r.pod_id
+    WHERE rs.request_id = $1
+      AND p.manager_user_id = $2
+    `,
+    [requestId, managerUserId]
+  );
+
+  return rows[0] || null;
+}
+
+// Keep old function for backward compatibility
 async function getScriptPathForApproval(requestId, managerUserId) {
   const { rows } = await pool.query(
     `
@@ -158,5 +180,6 @@ module.exports = {
   insertScriptRequest,
   approveRequest,
   rejectRequest,
+  getScriptForApproval,
   getScriptPathForApproval
 };

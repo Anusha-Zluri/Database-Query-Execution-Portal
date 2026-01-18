@@ -47,18 +47,26 @@ exports.getSubmissionDetails = async (req, res) => {
   let content = '';
   if (row.status === 'REJECTED') {
     content = null; // Don't show content for rejected requests
-  } else if (row.request_type === 'SCRIPT' && row.file_path) {
-    // Only read script file for non-rejected requests
-    try {
-      const fs = require('fs').promises;
-      const path = require('path');
-      const fullPath = path.resolve(row.file_path);
-      console.log('Reading script from:', fullPath);
-      content = await fs.readFile(fullPath, 'utf-8');
-      console.log('Script content length:', content.length);
-    } catch (err) {
-      console.error('Failed to read script file:', err);
-      content = `[Error reading script file: ${row.file_path}]`;
+  } else if (row.request_type === 'SCRIPT') {
+    // Try to get script content from DB first, fallback to file
+    if (row.script_content) {
+      content = row.script_content;
+      console.log('Script content from DB, length:', content.length);
+    } else if (row.file_path) {
+      // Fallback to reading from file system
+      try {
+        const fs = require('fs').promises;
+        const path = require('path');
+        const fullPath = path.resolve(row.file_path);
+        console.log('Reading script from file:', fullPath);
+        content = await fs.readFile(fullPath, 'utf-8');
+        console.log('Script content from file, length:', content.length);
+      } catch (err) {
+        console.error('Failed to read script file:', err);
+        content = `[Script file not available on this server]`;
+      }
+    } else {
+      content = '[Script content not available]';
     }
   } else {
     // For queries or other types

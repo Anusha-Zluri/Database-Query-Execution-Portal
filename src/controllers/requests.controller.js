@@ -252,6 +252,7 @@ exports.submitRequest = async (req, res) => {
       await requestsDAL.insertScriptRequest(client, {
         requestId,
         filePath: req.file.path,
+        scriptContent, // Save content to DB for preview and execution
         lineCount: analysis.lineCount,
         riskLevel: analysis.riskLevel,
         hasDangerousApis: analysis.hasDangerousApis
@@ -329,16 +330,30 @@ exports.getScriptForApproval = async (req, res) => {
     return res.status(400).json({ message: 'Invalid request id' });
   }
 
-  const filePath = await requestsDAL.getScriptPathForApproval(
+  const scriptData = await requestsDAL.getScriptForApproval(
     requestId,
     req.user.id
   );
 
-  if (!filePath) {
+  if (!scriptData) {
     return res.status(404).json({ message: 'Not authorized or not found' });
   }
 
-  const scriptContent = await fs.readFile(filePath, 'utf-8');
+  // Try to get content from DB first, fallback to file if needed
+  let scriptContent = scriptData.script_content;
+  
+  if (!scriptContent && scriptData.file_path) {
+    try {
+      scriptContent = await fs.readFile(scriptData.file_path, 'utf-8');
+    } catch (err) {
+      return res.status(404).json({ message: 'Script file not found' });
+    }
+  }
+
+  if (!scriptContent) {
+    return res.status(404).json({ message: 'Script content not available' });
+  }
+
   res.type('text/plain').send(scriptContent);
 };
 

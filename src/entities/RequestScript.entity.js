@@ -10,6 +10,7 @@ const RequestScript = new EntitySchema({
   properties: {
     request_id: { type: 'bigint', primary: true },
     file_path: { type: 'text' },
+    script_content: { type: 'text', nullable: true },
     checksum: { type: 'text', nullable: true },
     created_at: { type: 'timestamptz', onCreate: () => new Date() },
     line_count: { type: 'integer', nullable: true },
