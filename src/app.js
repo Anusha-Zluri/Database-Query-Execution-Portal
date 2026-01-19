@@ -4,18 +4,19 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger.config');
 
 const app = express();
+
+// Import routes
 const authRoutes = require('./routes/auth.routes');
 const requestRoutes = require('./routes/requests.routes');
 const approvalsRoutes = require('./routes/approvals.routes');
 const executionRoutes = require('./routes/execution.routes');
 const submissionsRoutes = require('./routes/submissions.routes');
 const podsRoutes = require('./routes/pods.routes');
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
+const analyticsRoutes = require('./routes/analytics.routes');
 
 // Middleware
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
@@ -299,20 +300,15 @@ app.use(
     exposedHeaders: ['Content-Disposition'], // Allow frontend to read this header
   })
 );
+
+// Register routes
 app.use('/auth', authRoutes);
 app.use('/requests', requestRoutes);
 app.use('/approvals', approvalsRoutes);
 app.use('/', executionRoutes);
-app.use('/execution', executionRoutes)
+app.use('/execution', executionRoutes);
 app.use('/pods', podsRoutes);
+app.use('/analytics', analyticsRoutes);
 app.use(submissionsRoutes);
-
-
-
-
-
-
-
-
 
 module.exports = app;
