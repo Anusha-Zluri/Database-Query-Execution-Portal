@@ -574,9 +574,11 @@ const downloadExecutionResults = async (req, res) => {
 
     // Convert to CSV
     if (rows.length === 0) {
-      const requestId = execution.request_id || executionId;
+      // Generate filename: username_timestamp.csv
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const username = execution.username || 'user';
       res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="request_${requestId}_results.csv"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${username}_${timestamp}.csv"`);
       return res.send('No results');
     }
 
@@ -612,12 +614,12 @@ const downloadExecutionResults = async (req, res) => {
 
     const csvContent = csvLines.join('\n');
 
-    // Use request_id for the filename (what users see in the UI)
-    const requestId = execution.request_id || executionId;
-    console.log(`[downloadExecutionResults] Using request_id: ${requestId} (from execution.request_id: ${execution.request_id})`);
+    // Generate filename: username_timestamp.csv (no request ID for security)
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const username = execution.username || 'user';
     
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="request_${requestId}_results.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${username}_${timestamp}.csv"`);
     res.send(csvContent);
   } catch (err) {
     console.error('Download results error:', err);

@@ -120,9 +120,20 @@ async function getExecutionById(executionId) {
   
   const result = await em.getKnex().raw(
     `
-    SELECT id, request_id, status, result_json, result_file_path, is_truncated
-    FROM executions
-    WHERE id = ?
+    SELECT 
+      e.id, 
+      e.request_id, 
+      e.status, 
+      e.result_json, 
+      e.result_file_path, 
+      e.is_truncated,
+      r.db_name,
+      r.db_instance,
+      u.username
+    FROM executions e
+    JOIN requests r ON e.request_id = r.id
+    JOIN users u ON r.requester_id = u.id
+    WHERE e.id = ?
     `,
     [executionId]
   );
