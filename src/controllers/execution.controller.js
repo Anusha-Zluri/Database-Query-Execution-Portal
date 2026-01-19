@@ -46,6 +46,19 @@ async function executePostgresQuery(request, instance) {
 
   try {
     const result = await execPool.query(request.query_text);
+    
+    // For DDL statements (CREATE, DROP, ALTER) that return no rows
+    if (result.rows.length === 0 && result.command) {
+      return {
+        rowCount: 1,
+        rows: [{
+          command: result.command,
+          message: `${result.command} command executed successfully`,
+          rowCount: result.rowCount || 0
+        }]
+      };
+    }
+    
     return {
       rowCount: result.rowCount,
       rows: result.rows
