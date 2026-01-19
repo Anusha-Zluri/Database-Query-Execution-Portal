@@ -266,7 +266,7 @@ export default function ApprovalDashboard() {
               onChange={(e) => setPodFilter(e.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1a9d7c] focus:border-transparent"
             >
-              <option value="">All PODs</option>
+              <option value="">All My PODs</option>
               {pods.map((pod) => (
                 <option key={pod.id} value={pod.id}>
                   {pod.name}
@@ -556,7 +556,7 @@ export default function ApprovalDashboard() {
                   onClick={() => setPodFilter("")}
                   className="mt-3 text-sm text-[#1a9d7c] hover:text-[#14b8a6] underline font-medium"
                 >
-                  View all PODs
+                  View all my PODs
                 </button>
               </>
             ) : (

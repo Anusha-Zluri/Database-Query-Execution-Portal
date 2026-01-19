@@ -58,11 +58,17 @@ const getStatusBreakdown = async (podIds) => {
   const result = await pool.query(
     `
     SELECT 
-      status,
+      CASE 
+        WHEN status IN ('APPROVED', 'EXECUTED') THEN 'APPROVED'
+        ELSE status
+      END as status,
       COUNT(*) as count
     FROM requests
     WHERE pod_id = ANY($1)
-    GROUP BY status
+    GROUP BY CASE 
+        WHEN status IN ('APPROVED', 'EXECUTED') THEN 'APPROVED'
+        ELSE status
+      END
     `,
     [podIds]
   );
