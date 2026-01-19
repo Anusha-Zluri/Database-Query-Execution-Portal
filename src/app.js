@@ -105,7 +105,8 @@ app.get('/api-info', (req, res) => {
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000", // Add this for Swagger UI
-  "https://database-query-execution-portal.vercel.app"
+  "https://database-query-execution-portal.vercel.app",
+  "https://database-query-execution-portal.onrender.com"
 ];
 
 app.use(
