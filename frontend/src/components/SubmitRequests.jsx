@@ -674,15 +674,15 @@ export default function SubmitRequests({ draftId, onDraftLoaded }) {
 
       {/* Documentation Sidebar (shown when Script is selected) */}
       {submissionType === "SCRIPT" && (
-        <div className="w-80 bg-slate-900 text-slate-300 rounded-xl p-6 space-y-4 overflow-y-auto max-h-[calc(100vh-12rem)]">
-          <div className="flex items-center gap-2 mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+        <div className="w-80 bg-slate-900 text-slate-300 rounded-xl overflow-hidden flex flex-col self-start">
+          <div className="flex items-center gap-2 p-6 pb-4 flex-shrink-0 border-b border-slate-700">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-[#1a9d7c]">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
             </svg>
             <h3 className="text-lg font-semibold text-white">Documentation</h3>
           </div>
 
-          <div className="space-y-4 text-sm">
+          <div className="space-y-4 text-sm overflow-y-auto px-6 py-4" style={{ maxHeight: '70vh' }}>
             <p className="text-slate-400">
               Database connections are auto-injected. No hardcoded credentials needed!
             </p>
@@ -692,22 +692,22 @@ export default function SubmitRequests({ draftId, onDraftLoaded }) {
             </div>
 
             {/* Required Format */}
-            <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-3">
-              <p className="text-blue-300 font-semibold text-xs mb-2">✅ REQUIRED FORMAT</p>
-              <ul className="text-xs text-blue-200 space-y-1">
+            <div className="bg-[#1a9d7c]/20 border border-[#1a9d7c]/50 rounded-lg p-3">
+              <p className="text-[#1a9d7c] font-semibold text-xs mb-2">REQUIRED FORMAT</p>
+              <ul className="text-xs text-slate-300 space-y-1">
                 <li>• Export an async function</li>
-                <li>• Return <code className="bg-blue-900/50 px-1 rounded">{'{ rowCount, rows }'}</code></li>
-                <li>• Use <code className="bg-blue-900/50 px-1 rounded">await</code> for async operations</li>
+                <li>• Return <code className="bg-slate-800 px-1 rounded">{'{ rowCount, rows }'}</code></li>
+                <li>• Use <code className="bg-slate-800 px-1 rounded">await</code> for async operations</li>
               </ul>
             </div>
 
             {/* Available Context */}
-            <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-3">
-              <p className="text-green-300 font-semibold text-xs mb-2">📦 AVAILABLE IN CONTEXT</p>
-              <ul className="text-xs text-green-200 space-y-1">
-                <li>• <code className="bg-green-900/50 px-1 rounded">db</code> - Database object</li>
-                <li>• <code className="bg-green-900/50 px-1 rounded">utils.sleep(ms)</code> - Async sleep</li>
-                <li>• <code className="bg-green-900/50 px-1 rounded">utils.now()</code> - Current date</li>
+            <div className="bg-[#14b8a6]/20 border border-[#14b8a6]/50 rounded-lg p-3">
+              <p className="text-[#14b8a6] font-semibold text-xs mb-2">AVAILABLE IN CONTEXT</p>
+              <ul className="text-xs text-slate-300 space-y-1">
+                <li>• <code className="bg-slate-800 px-1 rounded">db</code> - Database object</li>
+                <li>• <code className="bg-slate-800 px-1 rounded">utils.sleep(ms)</code> - Async sleep</li>
+                <li>• <code className="bg-slate-800 px-1 rounded">utils.now()</code> - Current date</li>
               </ul>
             </div>
 
@@ -762,34 +762,34 @@ export default function SubmitRequests({ draftId, onDraftLoaded }) {
 
             {/* MongoDB Specific Notes */}
             {selectedDbType === 'mongodb' && (
-              <div className="bg-yellow-900/30 border border-yellow-700/50 rounded-lg p-3">
-                <p className="text-yellow-300 font-semibold text-xs mb-2">⚠️ MONGODB NOTES</p>
-                <ul className="text-xs text-yellow-200 space-y-1.5">
-                  <li>• Use <code className="bg-yellow-900/50 px-1 rounded">db.collection('name')</code> to get collection</li>
-                  <li>• <code className="bg-yellow-900/50 px-1 rounded">find()</code> returns cursor - must call <code className="bg-yellow-900/50 px-1 rounded">.toArray()</code></li>
-                  <li>• Same for <code className="bg-yellow-900/50 px-1 rounded">aggregate()</code> and <code className="bg-yellow-900/50 px-1 rounded">listIndexes()</code></li>
+              <div className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-3">
+                <p className="text-slate-300 font-semibold text-xs mb-2">MONGODB NOTES</p>
+                <ul className="text-xs text-slate-400 space-y-1.5">
+                  <li>• Use <code className="bg-slate-800 px-1 rounded">db.collection('name')</code> to get collection</li>
+                  <li>• <code className="bg-slate-800 px-1 rounded">find()</code> returns cursor - must call <code className="bg-slate-800 px-1 rounded">.toArray()</code></li>
+                  <li>• Same for <code className="bg-slate-800 px-1 rounded">aggregate()</code> and <code className="bg-slate-800 px-1 rounded">listIndexes()</code></li>
                   <li>• All MongoDB operations supported: insertOne, updateMany, deleteOne, etc.</li>
-                  <li>• No <code className="bg-yellow-900/50 px-1 rounded">require()</code> - use built-in JavaScript only</li>
+                  <li>• No <code className="bg-slate-800 px-1 rounded">require()</code> - use built-in JavaScript only</li>
                 </ul>
               </div>
             )}
 
             {/* Common Mistakes */}
-            <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3">
-              <p className="text-red-300 font-semibold text-xs mb-2">❌ COMMON MISTAKES</p>
-              <div className="text-xs text-red-200 space-y-2">
+            <div className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-3">
+              <p className="text-slate-300 font-semibold text-xs mb-2">COMMON MISTAKES</p>
+              <div className="text-xs text-slate-400 space-y-2">
                 <div>
                   <p className="font-medium mb-1">Forgetting .toArray():</p>
-                  <code className="block bg-red-900/50 px-2 py-1 rounded text-[10px]">
-                    // ❌ const docs = await col.find({'{}'});<br/>
-                    // ✅ const docs = await col.find({'{}'}).toArray();
+                  <code className="block bg-slate-800 px-2 py-1 rounded text-[10px]">
+                    // Wrong: const docs = await col.find({'{}'});<br/>
+                    // Correct: const docs = await col.find({'{}'}).toArray();
                   </code>
                 </div>
                 <div>
                   <p className="font-medium mb-1">Wrong return format:</p>
-                  <code className="block bg-red-900/50 px-2 py-1 rounded text-[10px]">
-                    // ❌ return docs;<br/>
-                    // ✅ return {'{ rowCount: docs.length, rows: docs }'};
+                  <code className="block bg-slate-800 px-2 py-1 rounded text-[10px]">
+                    // Wrong: return docs;<br/>
+                    // Correct: return {'{ rowCount: docs.length, rows: docs }'};
                   </code>
                 </div>
               </div>

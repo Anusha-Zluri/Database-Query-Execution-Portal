@@ -4,38 +4,38 @@ const options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: '🗄️ Database Query Execution Portal API',
+      title: 'Database Query Execution Portal API',
       version: '1.0.0',
       description: `
-# 🚀 Secure Database Query & Script Execution Platform
+# Secure Database Query & Script Execution Platform
 
 **Enterprise-grade API for managing database operations with approval workflows**
 
-## ✨ Key Features
+## Key Features
 
-- 🔐 **JWT Authentication** - Secure token-based authentication
-- 🏢 **Multi-POD Support** - Organize requests by teams/departments  
-- 🗃️ **Multi-Database** - PostgreSQL & MongoDB support
-- 📋 **Approval Workflow** - Manager approval required for all operations
-- 🛡️ **Secure Execution** - Scripts run in isolated VM sandbox
-- 📊 **Result Export** - Download results as CSV files
-- 🔍 **Audit Trail** - Complete tracking of all operations
+- **JWT Authentication** - Secure token-based authentication
+- **Multi-POD Support** - Organize requests by teams/departments  
+- **Multi-Database** - PostgreSQL & MongoDB support
+- **Approval Workflow** - Manager approval required for all operations
+- **Secure Execution** - Scripts run in isolated VM sandbox
+- **Result Export** - Download results as CSV files
+- **Audit Trail** - Complete tracking of all operations
 
-## 🔄 Workflow Process
+## Workflow Process
 
-1. **🔑 Authenticate** - Login to receive JWT token
-2. **📝 Submit Request** - Create query or script execution request
-3. **👥 Manager Review** - Managers approve/reject requests for their PODs
-4. **⚡ Execute** - Approved requests run in secure sandbox
-5. **📥 Download** - Export results as CSV files
+1. **Authenticate** - Login to receive JWT token
+2. **Submit Request** - Create query or script execution request
+3. **Manager Review** - Managers approve/reject requests for their PODs
+4. **Execute** - Approved requests run in secure sandbox
+5. **Download** - Export results as CSV files
 
-## 🔗 Quick Links
+## Quick Links
 
 - **Frontend App**: https://database-query-execution-portal.vercel.app
 - **Health Check**: /health
 - **API Info**: /api-info
 
-## 🔐 Authentication
+## Authentication
 
 Most endpoints require JWT authentication. Get your token from the login endpoint, then click the **Authorize** button above and enter: \`Bearer <your-token>\`
       `,
@@ -51,11 +51,11 @@ Most endpoints require JWT authentication. Get your token from the login endpoin
     servers: [
       {
         url: 'http://localhost:3000',
-        description: '💻 Development Server (use this for local testing)'
+        description: 'Development Server (use this for local testing)'
       },
       {
         url: 'https://database-query-execution-portal.onrender.com',
-        description: '🌐 Production Server'
+        description: 'Production Server'
       }
     ],
     components: {
@@ -64,7 +64,7 @@ Most endpoints require JWT authentication. Get your token from the login endpoin
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: '🔑 JWT token obtained from `/auth/login` endpoint. Format: `Bearer <token>`'
+          description: 'JWT token obtained from `/auth/login` endpoint. Format: `Bearer <token>`'
         }
       },
       schemas: {
