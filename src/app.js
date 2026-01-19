@@ -19,7 +19,70 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+  const ExecutionWatchdog = require('./services/execution.watchdog.service');
+  const metricsService = require('./services/metrics.service');
+  const executionSemaphore = require('./services/execution.semaphore');
+  
+  const healthStatus = metricsService.getHealthStatus();
+  const activeExecutions = ExecutionWatchdog.getActiveExecutions();
+  const semaphoreStats = executionSemaphore.getStats();
+  
+  // Alert checks
+  const alerts = [];
+  
+  if (semaphoreStats.current >= semaphoreStats.max * 0.9) {
+    alerts.push('CRITICAL: Near max concurrency');
+  }
+  
+  if (semaphoreStats.queued > semaphoreStats.maxQueueSize * 0.8) {
+    alerts.push('CRITICAL: Queue nearly full');
+  }
+  
+  if (semaphoreStats.queued > 10) {
+    alerts.push('WARNING: Execution queue building up');
+  }
+  
+  if (activeExecutions.length > 15) {
+    alerts.push('WARNING: High number of active executions');
+  }
+  
+  const metrics = metricsService.getMetrics();
+  if (metrics.executionsKilledByWatchdog > 10) {
+    alerts.push('WARNING: Many watchdog kills detected');
+  }
+  
+  if (metrics.backendsTerminated > 20) {
+    alerts.push('WARNING: Many backend terminations');
+  }
+  
+  const health = {
+    status: alerts.some(a => a.startsWith('CRITICAL')) ? 'critical' : healthStatus.status,
+    alerts,
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: {
+      heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB',
+      rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB'
+    },
+    activeExecutions: {
+      count: ExecutionWatchdog.getActiveCount(),
+      details: activeExecutions
+    },
+    semaphore: semaphoreStats,
+    warnings: healthStatus.warnings,
+    metrics: healthStatus.metrics
+  };
+  
+  const statusCode = health.status === 'healthy' ? 200 : 503;
+  res.status(statusCode).json(health);
+});
+
+// Metrics endpoint (Prometheus format)
+app.get('/metrics', (req, res) => {
+  const metricsService = require('./services/metrics.service');
+  res.set('Content-Type', 'text/plain');
+  res.send(metricsService.getPrometheusMetrics());
 });
 
 // Swagger Documentation

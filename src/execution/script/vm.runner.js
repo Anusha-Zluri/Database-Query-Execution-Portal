@@ -1,136 +1,144 @@
-const vm = require('vm');
+const { Worker } = require('worker_threads');
+const path = require('path');
 
 module.exports = async function runUserScript({
   scriptCode,
   context,
-  timeoutMs = 10000  // Increased to 10 seconds for database operations
+  timeoutMs = 30000,  // Default 30 seconds
+  executionContext = {}
 }) {
-  // Create a completely isolated sandbox with no prototype chain
-  const sandbox = Object.create(null);
-  
-  // Only add safe, whitelisted globals
-  const safeGlobals = {
-    // Basic JavaScript constructors (frozen to prevent modification)
-    Object: Object,
-    Array: Array,
-    String: String,
-    Number: Number,
-    Boolean: Boolean,
-    Date: Date,
-    Math: Math,
-    JSON: JSON,
-    RegExp: RegExp,
-    Error: Error,
-    TypeError: TypeError,
-    RangeError: RangeError,
-    
-    // Safe utility functions
-    parseInt: parseInt,
-    parseFloat: parseFloat,
-    isNaN: isNaN,
-    isFinite: isFinite,
-    
-    // Module system (controlled)
-    module: { exports: {} },
-    exports: {},
-    
-    // Database context (what we actually want to expose)
-    ...context
-  };
-
-  // Add globals to sandbox
-  Object.assign(sandbox, safeGlobals);
-
-  // Create VM context with security restrictions
-  const vmContext = vm.createContext(sandbox, {
-    name: 'SecureUserScript',
-    origin: 'user-script',
-    codeGeneration: {
-      strings: false,  // Disable eval()
-      wasm: false      // Disable WebAssembly
-    }
-  });
-
-  // Wrap user code with security measures
-  const wrappedCode = `
-    (function() {
-      "use strict";
-      
-      // Remove any dangerous globals that might have leaked
-      try {
-        if (typeof global !== 'undefined') global = undefined;
-        if (typeof process !== 'undefined') process = undefined;
-        if (typeof require !== 'undefined') require = undefined;
-        if (typeof Buffer !== 'undefined') Buffer = undefined;
-      } catch (e) {
-        // Ignore errors when trying to remove globals
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(
+      path.join(__dirname, './vm.worker.js'),
+      {
+        workerData: {
+          scriptCode,
+          timeoutMs
+        },
+        resourceLimits: {
+          maxOldGenerationSizeMb: 512,  // 512MB heap limit
+          maxYoungGenerationSizeMb: 128, // 128MB young generation
+          codeRangeSizeMb: 64,
+          stackSizeMb: 4
+        }
       }
-      
-      // Freeze prototypes to prevent pollution
-      Object.freeze(Object.prototype);
-      Object.freeze(Array.prototype);
-      Object.freeze(String.prototype);
-      Object.freeze(Function.prototype);
-      
-      // Execute user code
-      ${scriptCode}
-      return module.exports;
-    })()
-  `;
+    );
 
-  try {
-    const script = new vm.Script(wrappedCode, {
-      filename: 'user-script.js',
-      timeout: timeoutMs
-    });
-
-    const exportedFn = await script.runInContext(vmContext, {
-      displayErrors: false,
-      breakOnSigint: true
-    });
-
-    if (typeof exportedFn !== 'function') {
-      throw new Error('Script must export a function'); 
+    // Register worker with watchdog for force termination if needed
+    if (executionContext.onWorkerCreated) {
+      executionContext.onWorkerCreated(worker);
     }
 
-    // Execute the user function with single timeout protection
-    /*Stops:
-	•	infinite async awaits
-	•	hanging DB calls
-	•	never-resolving promises
-*/
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
-        reject(new Error('Function execution timeout'));
-      }, timeoutMs);
+    let finished = false;
+
+    // 🔥 HARD KILL TIMER — Forcefully terminates worker thread
+    // This is the ONLY way to truly kill infinite loops like while(true){}
+    const killTimer = setTimeout(() => {
+      if (!finished) {
+        finished = true;
+        worker.terminate();   // Forcefully kills the worker thread
+        reject(new Error('Script execution timeout - worker terminated'));
+      }
+    }, timeoutMs);
+
+    // Handle messages from worker
+    worker.on('message', async (msg) => {
+      if (finished) return;
+
+      // Worker is requesting a DB operation
+      if (msg.type === 'db_call') {
+        try {
+          let result;
+          
+          if (msg.method === 'query') {
+            // Postgres query
+            result = await context.db.query(msg.args[0], msg.args[1]);
+          } else if (msg.method === 'collection') {
+            // MongoDB collection access
+            const collection = context.db.collection(msg.collectionName);
+            
+            if (msg.operation === 'cursor') {
+              // Handle cursor chain: find().limit().skip().toArray()
+              let cursor = null;
+              
+              for (const step of msg.cursorChain) {
+                if (step.method === 'find' || step.method === 'aggregate') {
+                  // Initial cursor creation
+                  cursor = collection[step.method](...step.args);
+                  // Add cursor timeout to prevent hung cursors
+                  if (cursor.maxTimeMS) {
+                    cursor.maxTimeMS(25000); // 25s timeout
+                  }
+                } else {
+                  // Chain methods like limit, skip, sort, project
+                  cursor = cursor[step.method](...step.args);
+                }
+              }
+              
+              // Execute toArray on the final cursor
+              result = await cursor.toArray();
+            } else {
+              // Direct collection operation (insertOne, updateOne, etc.)
+              result = await collection[msg.operation](...msg.args);
+            }
+          }
+          
+          // Serialize result to handle MongoDB ObjectIds and other special types
+          // JSON.parse(JSON.stringify()) converts ObjectIds to strings
+          const serializedResult = JSON.parse(JSON.stringify(result));
+          
+          worker.postMessage({
+            type: 'db_response',
+            callId: msg.callId,
+            result: serializedResult
+          });
+        } catch (error) {
+          worker.postMessage({
+            type: 'db_error',
+            callId: msg.callId,
+            error: error.message
+          });
+        }
+        return;
+      }
+
+      // Worker finished execution
+      if (msg.type === 'result') {
+        finished = true;
+        clearTimeout(killTimer);
+
+        if (msg.ok) {
+          resolve(msg.result);
+        } else {
+          reject(new Error(msg.error));
+        }
+      }
     });
 
-    const result = await Promise.race([
-      exportedFn(context),
-      timeoutPromise
-    ]);
+    // Worker crashed
+    worker.on('error', (err) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(killTimer);
+      reject(err);
+    });
 
-    if (
-      !result ||
-      typeof result.rowCount !== 'number' ||
-      !Array.isArray(result.rows)
-    ) {
-      throw new Error('Script must return { rowCount, rows }');
-    }
-
-    return result;
-  } catch (error) {
-    // Sanitize error messages to prevent information leakage
-    if (error.message && (
-      error.message.includes('require is not defined') || 
-      error.message.includes('process is not defined') ||
-      error.message.includes('Constructor access blocked') ||
-      error.message.includes('dangerous')
-    )) {
-      throw new Error('Script attempted to access restricted functionality'); //sanitizing the error
-    }
-    
-    // Allow other errors (like legitimate script errors) to pass through
-    throw error;
-  }
+    // Worker exited (could be from terminate() or natural exit)
+    worker.on('exit', (code) => {
+      if (!finished) {
+        finished = true;
+        clearTimeout(killTimer);
+        
+        // Clear any pending DB calls to prevent memory leaks
+        pendingDbCalls.clear();
+        
+        if (code !== 0) {
+          reject(new Error(`Worker stopped with exit code ${code}`));
+        }
+      }
+    });
+  });
 };
+
+// Track pending DB calls for cleanup
+const pendingDbCalls = new WeakMap();

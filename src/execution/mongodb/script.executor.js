@@ -2,7 +2,7 @@ const { MongoClient } = require('mongodb');
 const runUserScript = require('../script/vm.runner');
 const utils = require('../script/utils');
 
-module.exports = async function executeMongoScript(request, instance) {
+module.exports = async function executeMongoScript(request, instance, executionContext = {}) {
   if (!request.script_text) {
     throw new Error('Script code missing for execution');
   }
@@ -14,11 +14,17 @@ module.exports = async function executeMongoScript(request, instance) {
   const client = new MongoClient(instance.baseUrl, {
     maxPoolSize: 1,        // predictable resource usage
     serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 25000,  // CRITICAL: Socket timeout to prevent hung connections
+    connectTimeoutMS: 5000,
+    maxIdleTimeMS: 30000
   });
 
-  await client.connect();
+  let connected = false;
 
   try {
+    await client.connect();
+    connected = true;
+
     const db = client.db(request.db_name);
 
     /**
@@ -38,7 +44,8 @@ module.exports = async function executeMongoScript(request, instance) {
     const result = await runUserScript({
       scriptCode: request.script_text,
       context,
-      timeoutMs: 10000,  // Increased to 10 seconds for database operations
+      timeoutMs: 30000,  // 30 seconds - allows complex DB operations while preventing infinite loops
+      executionContext  // Pass through for worker registration
     });
 
     return result;
@@ -50,6 +57,14 @@ module.exports = async function executeMongoScript(request, instance) {
     err.message = `Mongo execution failed: ${err.message}`;
     throw err;
   } finally {
-    await client.close();
+    // CRITICAL: Always close client, even if worker was terminated
+    if (connected) {
+      try {
+        await client.close();
+      } catch (err) {
+        console.error('[executeMongoScript] Error closing client:', err.message);
+        // Don't throw - we want to ensure cleanup continues
+      }
+    }
   }
 };

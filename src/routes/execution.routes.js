@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const authMiddleware = require('../middlewares/auth.middleware');
+const { executionRateLimiter } = require('../middlewares/rateLimit.middleware');
 const { executeRequest, downloadExecutionResults } = require('../controllers/execution.controller');
 const { validate } = require('../middlewares/validate.middleware');
 const { executionIdParamSchema } = require('../validations/execution.validation');
@@ -98,6 +99,7 @@ const { executionIdParamSchema } = require('../validations/execution.validation'
 router.post(
   '/execute/:id',
   authMiddleware,
+  executionRateLimiter,  // Rate limit: 10 executions per minute
   validate(executionIdParamSchema, 'params'),
   executeRequest
 );

@@ -17,7 +17,7 @@ async function lockApprovedRequest(em, requestId) {
   // Use knex for parameterized queries
   const result = await em.getKnex().raw(
     `
-    SELECT id, request_type, db_instance, db_name
+    SELECT id, request_type, db_instance, db_name, status, requester_id
     FROM requests
     WHERE id = ? AND status = 'APPROVED'
     FOR UPDATE  

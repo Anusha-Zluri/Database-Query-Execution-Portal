@@ -3,6 +3,7 @@ const cors = require("cors");
 const app = require('./app');
 const { testConnection } = require('./config/db');
 const { initORM } = require('./config/orm');
+const { startCleanupService } = require('./services/execution.cleanup.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -15,6 +16,10 @@ const startServer = async () => {
     // Initialize MikroORM (runs alongside pg pool)
     await initORM();
     console.log('MikroORM initialized');
+
+    // Start execution cleanup service (failsafe for stuck executions)
+    startCleanupService();
+    console.log('Execution cleanup service started');
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

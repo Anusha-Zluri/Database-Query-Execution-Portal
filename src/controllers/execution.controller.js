@@ -2,6 +2,9 @@ const fs = require('fs/promises');
 const instanceRegistry = require('../registry/instances.registry');
 
 const executionDAL = require('../dal/execution.dal');
+const executionSemaphore = require('../services/execution.semaphore');
+const ExecutionWatchdog = require('../services/execution.watchdog.service');
+const metricsService = require('../services/metrics.service');
 
 const executePostgresScript = require('../execution/postgres/script.executor');
 const executeMongoScript = require('../execution/mongodb/script.executor');
@@ -16,17 +19,27 @@ const { approvalSuccessMessage, approvalFailureMessage } = require('../services/
 /* ============================================================
    DISPATCH EXECUTION
 ============================================================ */
-async function dispatchExecution(request, instance) {
+async function dispatchExecution(request, instance, executionId) {
+  // Create execution context for backend PID tracking and worker registration
+  const executionContext = {
+    onBackendPid: (backendPid) => {
+      ExecutionWatchdog.setBackendPid(executionId, backendPid);
+    },
+    onWorkerCreated: (worker) => {
+      ExecutionWatchdog.setWorkerThread(executionId, worker);
+    }
+  };
+
   if (instance.engine === 'postgres') {
     return request.request_type === 'QUERY'
       ? executePostgresQuery(request, instance)
-      : executePostgresScript(request, instance);
+      : executePostgresScript(request, instance, executionContext);
   }
 
   if (instance.engine === 'mongodb') {
     return request.request_type === 'QUERY'
       ? executeMongoQuery(request, instance)
-      : executeMongoScript(request, instance);
+      : executeMongoScript(request, instance, executionContext);
   }
 
   throw new Error(`Unsupported engine: ${instance.engine}`);
@@ -40,11 +53,16 @@ async function executePostgresQuery(request, instance) {
   url.pathname = `/${request.db_name}`;
 
   const execPool = new Pool({
-    connectionString: url.toString()
-
+    connectionString: url.toString(),
+    statement_timeout: 25000,  // 25s timeout
+    query_timeout: 25000,
+    connectionTimeoutMillis: 5000,
+    max: 2,  // Limit to 2 connections (reduced from 10 to prevent exhaustion)
+    application_name: 'query_executor'
   });
 
   try {
+    // Query with timeout protection via statement_timeout
     const result = await execPool.query(request.query_text);
     
     // For DDL statements (CREATE, DROP, ALTER) that return no rows
@@ -75,7 +93,14 @@ async function executeMongoQuery(request, instance) {
   const payload = JSON.parse(request.query_text);
   const { collection, operation, args = {}, data } = payload;
 
-  const client = new MongoClient(instance.baseUrl);
+  const client = new MongoClient(instance.baseUrl, {
+    maxPoolSize: 1,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 25000,  // 25s timeout
+    connectTimeoutMS: 5000,
+    maxIdleTimeMS: 30000
+  });
+  
   await client.connect();
 
   try {
@@ -83,7 +108,7 @@ async function executeMongoQuery(request, instance) {
 
     // Handle find operation
     if (operation === 'find') {
-      const docs = await col.find(args.filter || {}).toArray();
+      const docs = await col.find(args.filter || {}).maxTimeMS(25000).toArray();
       return {
         rowCount: docs.length,
         rows: docs
@@ -92,7 +117,7 @@ async function executeMongoQuery(request, instance) {
 
     // Handle findOne
     if (operation === 'findOne') {
-      const doc = await col.findOne(args.filter || {});
+      const doc = await col.findOne(args.filter || {}, { maxTimeMS: 25000 });
       return {
         rowCount: doc ? 1 : 0,
         rows: doc ? [doc] : []
@@ -101,7 +126,7 @@ async function executeMongoQuery(request, instance) {
 
     // Handle countDocuments
     if (operation === 'countDocuments') {
-      const count = await col.countDocuments(args.filter || {});
+      const count = await col.countDocuments(args.filter || {}, { maxTimeMS: 25000 });
       return {
         rowCount: 1,
         rows: [{ count }]
@@ -110,7 +135,7 @@ async function executeMongoQuery(request, instance) {
 
     // Handle estimatedDocumentCount
     if (operation === 'estimatedDocumentCount') {
-      const count = await col.estimatedDocumentCount();
+      const count = await col.estimatedDocumentCount({ maxTimeMS: 25000 });
       return {
         rowCount: 1,
         rows: [{ count }]
@@ -121,7 +146,7 @@ async function executeMongoQuery(request, instance) {
     if (operation === 'distinct') {
       const field = args.field || args.key;
       const filter = args.filter || {};
-      const values = await col.distinct(field, filter);
+      const values = await col.distinct(field, filter, { maxTimeMS: 25000 });
       return {
         rowCount: values.length,
         rows: values.map(v => ({ value: v }))
@@ -279,7 +304,7 @@ async function executeMongoQuery(request, instance) {
     if (operation === 'aggregate') {
       const pipeline = args.pipeline || args || [];
       const options = args.options || {};
-      const docs = await col.aggregate(pipeline, options).toArray();
+      const docs = await col.aggregate(pipeline, { ...options, maxTimeMS: 25000 }).toArray();
       return {
         rowCount: docs.length,
         rows: docs
@@ -378,6 +403,7 @@ async function executeRequestInternal(requestId) {
   const client = await executionDAL.getClient();
   let executionId = null;
   let startTime;
+  let userId = null;
 
   try {
     /* ===============================
@@ -387,8 +413,19 @@ async function executeRequestInternal(requestId) {
 
     const request = await executionDAL.lockApprovedRequest(client, requestId);
     if (!request) {
-      throw new Error('Approved request not found');
+      throw new Error('Request not found or not approved');
     }
+    
+    // CRITICAL: Double-check approval status to prevent bypass
+    if (request.status !== 'APPROVED') {
+      throw new Error('Request must be approved before execution');
+    }
+    
+    // Get user ID for per-user concurrency limit
+    userId = request.requester_id;
+    
+    // Acquire semaphore slot with user ID
+    await executionSemaphore.acquire(userId);
 
     if (request.request_type === 'QUERY') {
       request.query_text = await executionDAL.loadQueryText(client, requestId);
@@ -423,11 +460,17 @@ async function executeRequestInternal(requestId) {
     // Locks Make execution row durable
     await executionDAL.commitTransaction(client);
 
+    // Register with watchdog for timeout protection
+    ExecutionWatchdog.register(executionId, 35000); // 35s timeout
+    
+    // Record metrics
+    metricsService.recordExecutionStart();
+
     /* ===============================
        2️⃣ ACTUAL EXECUTION
     =============================== */
     try {
-      const result = await dispatchExecution(request, instance);
+      const result = await dispatchExecution(request, instance, executionId);
 
       // Store result with file handling for very large results
       const fs = require('fs').promises;
@@ -490,6 +533,12 @@ async function executeRequestInternal(requestId) {
       
       console.log(`[executeRequest] Updated execution ${executionId}: isTruncated=${isTruncated}, resultFilePath=${resultFilePath}`);
       
+      // Unregister from watchdog (execution completed successfully)
+      ExecutionWatchdog.unregister(executionId);
+      
+      // Record metrics
+      metricsService.recordExecutionComplete(Date.now() - startTime, true);
+      
       // Send success notification (non-blocking)
       /* istanbul ignore next */
       sendExecutionSuccessNotification(requestId, Date.now() - startTime, result)
@@ -502,6 +551,16 @@ async function executeRequestInternal(requestId) {
         execErr.message,
         execErr.stack || null
       );
+      
+      // Unregister from watchdog (execution failed)
+      ExecutionWatchdog.unregister(executionId);
+      
+      // Record metrics
+      const isTimeout = execErr.message.includes('timeout') || execErr.message.includes('terminated');
+      if (isTimeout) {
+        metricsService.recordTimeout();
+      }
+      metricsService.recordExecutionComplete(Date.now() - startTime, false);
       
       // Send failure notification (non-blocking)
       /* istanbul ignore next */
@@ -521,6 +580,8 @@ async function executeRequestInternal(requestId) {
     }
     throw err;
   } finally {
+    // ALWAYS release semaphore and client
+    executionSemaphore.release(userId);
     client.release();
   }
 }
