@@ -20,6 +20,8 @@ const { executionIdParamSchema } = require('../validations/execution.validation'
  *     summary: Execute an approved request
  *     description: Execute an approved database query or script request
  *     tags: [Execution]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -107,6 +109,8 @@ router.post(
  *     summary: Download execution results
  *     description: Download execution results as CSV file
  *     tags: [Execution]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

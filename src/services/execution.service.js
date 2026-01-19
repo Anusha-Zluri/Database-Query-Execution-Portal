@@ -11,7 +11,7 @@ const executeMongoScript = require('../execution/mongodb/script.executor');
 
 // Constants
 const MAX_ROWS_IN_DB = 100; // Store only preview in database
-const MAX_ROWS_TOTAL = 10000; // Maximum rows to store in file
+const MAX_ROWS_TOTAL = 100; // Maximum rows to store in file
 const RESULTS_DIR = path.join(__dirname, '../../uploads/results');
 
 /* =========================

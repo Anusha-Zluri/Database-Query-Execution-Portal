@@ -79,6 +79,7 @@ export default function MySubmissions({ onClone }) {
   };
 
   const handleDownloadResults = async (executionId) => {
+    console.log('[handleDownloadResults] Execution ID:', executionId);
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`http://localhost:3000/executions/${executionId}/download`, {
@@ -92,11 +93,25 @@ export default function MySubmissions({ onClone }) {
         throw new Error('Download failed');
       }
 
+      // Get filename from Content-Disposition header if available
+      const contentDisposition = response.headers.get('Content-Disposition');
+      console.log('[handleDownloadResults] Content-Disposition:', contentDisposition);
+      let filename = `request_${executionId}_results.csv`; // Fallback uses execution ID since we don't have request ID here
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/"/g, '');
+        }
+      }
+      
+      console.log('[handleDownloadResults] Final filename:', filename);
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `execution_${executionId}_results.json`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

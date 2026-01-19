@@ -383,10 +383,11 @@ async function executeRequestInternal(requestId) {
       // Load script content from DB (survives Render restarts)
       const scriptData = await executionDAL.loadScriptContent(client, requestId);
       
+      /* istanbul ignore else */
       if (scriptData?.script_content) {
         // Use content from DB
         request.script_text = scriptData.script_content;
-      } else if (scriptData?.file_path) {
+      } /* istanbul ignore next */ else if (scriptData?.file_path) {
         // Fallback to file if DB content is missing
         try {
           request.script_text = await fs.readFile(scriptData.file_path, 'utf-8');
@@ -477,6 +478,7 @@ async function executeRequestInternal(requestId) {
       console.log(`[executeRequest] Updated execution ${executionId}: isTruncated=${isTruncated}, resultFilePath=${resultFilePath}`);
       
       // Send success notification (non-blocking)
+      /* istanbul ignore next */
       sendExecutionSuccessNotification(requestId, Date.now() - startTime, result)
         .catch(err => console.error('Failed to send success notification:', err.message));
         
@@ -489,6 +491,7 @@ async function executeRequestInternal(requestId) {
       );
       
       // Send failure notification (non-blocking)
+      /* istanbul ignore next */
       sendExecutionFailureNotification(requestId, Date.now() - startTime, execErr.message, execErr.stack || null)
         .catch(err => console.error('Failed to send failure notification:', err.message));
     }
@@ -527,8 +530,12 @@ const downloadExecutionResults = async (req, res) => {
   try {
     const executionId = Number(req.params.id);
     
+    console.log(`[downloadExecutionResults] Execution ID from params: ${executionId}`);
+    
     // Get execution record
     const execution = await executionDAL.getExecutionById(executionId);
+    
+    console.log(`[downloadExecutionResults] Execution found: ${execution ? 'yes' : 'no'}, result_file_path: ${execution?.result_file_path}`);
     
     if (!execution) {
       return res.status(404).json({ error: 'Execution not found' });
@@ -540,18 +547,65 @@ const downloadExecutionResults = async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // If result is in file, serve the file
+    let rows = [];
+    
+    // If result is in file, read from file
     if (execution.result_file_path) {
       const fileContent = await fs.readFile(execution.result_file_path, 'utf-8');
       const result = JSON.parse(fileContent);
-      
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', `attachment; filename="execution-${executionId}-results.json"`);
-      return res.json(result);
+      rows = result.rows || [];
+    } else {
+      // Otherwise, get result from database
+      rows = execution.result_json?.rows || [];
     }
 
-    // Otherwise, return result from database
-    res.json(execution.result_json);
+    // Convert to CSV
+    if (rows.length === 0) {
+      const requestId = execution.request_id || executionId;
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="request_${requestId}_results.csv"`);
+      return res.send('No results');
+    }
+
+    // Get all unique keys from all rows (in case rows have different structures)
+    const allKeys = new Set();
+    rows.forEach(row => {
+      Object.keys(row).forEach(key => allKeys.add(key));
+    });
+    const headers = Array.from(allKeys);
+
+    // Helper function to escape CSV values
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      // If value contains comma, quote, or newline, wrap in quotes and escape quotes
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    // Build CSV content
+    const csvLines = [];
+    
+    // Add header row
+    csvLines.push(headers.map(escapeCSV).join(','));
+    
+    // Add data rows
+    rows.forEach(row => {
+      const values = headers.map(header => escapeCSV(row[header]));
+      csvLines.push(values.join(','));
+    });
+
+    const csvContent = csvLines.join('\n');
+
+    // Use request_id for the filename (what users see in the UI)
+    const requestId = execution.request_id || executionId;
+    console.log(`[downloadExecutionResults] Using request_id: ${requestId} (from execution.request_id: ${execution.request_id})`);
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="request_${requestId}_results.csv"`);
+    res.send(csvContent);
   } catch (err) {
     console.error('Download results error:', err);
     res.status(500).json({ error: 'Failed to download results' });

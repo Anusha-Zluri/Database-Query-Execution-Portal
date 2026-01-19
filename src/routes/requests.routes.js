@@ -26,6 +26,8 @@ const {
  *     summary: Get available database types
  *     description: Retrieve list of supported database engine types
  *     tags: [Requests]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Database types retrieved successfully
@@ -64,6 +66,8 @@ router.get(
  *     summary: Get database instances
  *     description: Retrieve list of available database instances, optionally filtered by type
  *     tags: [Requests]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: type
@@ -108,6 +112,8 @@ router.get(
  *     summary: Get databases from instance
  *     description: Retrieve list of databases available in a specific database instance
  *     tags: [Requests]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: instance
@@ -174,6 +180,8 @@ router.get(
  *     summary: Submit a new request
  *     description: Submit a database query or script execution request
  *     tags: [Requests]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -287,6 +295,8 @@ router.post(
  *     summary: Get script content for approval
  *     description: Retrieve the full script content for review during approval process
  *     tags: [Requests]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

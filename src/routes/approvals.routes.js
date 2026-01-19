@@ -24,6 +24,8 @@ const {
  *     summary: Get pending approvals
  *     description: Retrieve list of requests pending approval with filtering and pagination
  *     tags: [Approvals]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: status
@@ -176,6 +178,8 @@ router.get(
  *     summary: Get script preview for approval
  *     description: Retrieve script content preview for approval review
  *     tags: [Approvals]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -245,6 +249,8 @@ router.get(
  *     summary: Approve a request
  *     description: Approve a pending request for execution
  *     tags: [Approvals]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -309,6 +315,8 @@ router.post(
  *     summary: Reject a request
  *     description: Reject a pending request with a reason
  *     tags: [Approvals]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

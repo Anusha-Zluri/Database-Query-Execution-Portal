@@ -10,7 +10,7 @@ const config = require('./mikro-orm.config');
  * - No breaking changes to existing functionality
  */
 
-let orm = null;
+let orm = null;  //ensures sinhgleton instance
 
 async function initORM() {
   if (orm) {

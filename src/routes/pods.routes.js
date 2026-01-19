@@ -17,6 +17,8 @@ const podsController = require('../controllers/pods.controller');
  *     summary: Get all PODs
  *     description: Retrieve list of all available PODs for request categorization
  *     tags: [PODs]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: PODs retrieved successfully

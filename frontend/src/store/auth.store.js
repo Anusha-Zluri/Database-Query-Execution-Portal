@@ -10,7 +10,7 @@ export const useAuthStore = create((set) => ({
     set({ loading: true });
 
     try {
-      const { token } = await loginApi(email, password);
+      const { token } = await loginApi(email, password); //api call
       localStorage.setItem("token", token);
 
       const user = await getMe();

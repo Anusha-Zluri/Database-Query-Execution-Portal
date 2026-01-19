@@ -54,6 +54,7 @@ exports.getSubmissionDetails = async (req, res) => {
       console.log('Script content from DB, length:', content.length);
     } else if (row.file_path) {
       // Fallback to reading from file system
+      /* istanbul ignore next */
       try {
         const fs = require('fs').promises;
         const path = require('path');

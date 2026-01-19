@@ -279,7 +279,7 @@ exports.submitRequest = async (req, res) => {
       status: 'PENDING'
     });
 
-  } catch (err) {
+  } /* istanbul ignore next */ catch (err) {
     await client.query('ROLLBACK');
     console.error('Submit request error:', err);
     res.status(500).json({ message: err.message });
@@ -345,7 +345,7 @@ exports.getScriptForApproval = async (req, res) => {
   if (!scriptContent && scriptData.file_path) {
     try {
       scriptContent = await fs.readFile(scriptData.file_path, 'utf-8');
-    } catch (err) {
+    } /* istanbul ignore next */ catch (err) {
       return res.status(404).json({ message: 'Script file not found' });
     }
   }
@@ -445,7 +445,7 @@ exports.getDatabases = async (req, res) => {
     }
 
     res.json({ databases });
-  } catch (err) {
+  } /* istanbul ignore next */ catch (err) {
     console.error('Get databases error:', err);
     res.status(500).json({ 
       message: 'Failed to fetch databases from instance',

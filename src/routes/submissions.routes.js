@@ -24,6 +24,8 @@ const {
  *     summary: Get submission status counts
  *     description: Retrieve count of submissions by status for the current user
  *     tags: [Submissions]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Submission counts retrieved successfully
@@ -80,6 +82,8 @@ router.get(
  *     summary: Get user submissions
  *     description: Retrieve paginated list of submissions for the current user
  *     tags: [Submissions]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: page
@@ -145,6 +149,8 @@ router.get(
  *     summary: Get submission details
  *     description: Retrieve detailed information about a specific submission
  *     tags: [Submissions]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -195,6 +201,8 @@ router.get(
  *     summary: Clone a submission
  *     description: Create a new draft submission based on an existing submission
  *     tags: [Submissions]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -253,6 +261,8 @@ router.post(
  *     summary: Get submission for editing
  *     description: Retrieve submission data formatted for editing (draft submissions only)
  *     tags: [Submissions]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -313,6 +323,8 @@ router.get(
  *     summary: Update draft submission
  *     description: Update a draft submission with new content or metadata
  *     tags: [Submissions]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -393,6 +405,8 @@ router.patch(
  *     summary: Submit draft for approval
  *     description: Convert a draft submission to pending status for approval
  *     tags: [Submissions]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

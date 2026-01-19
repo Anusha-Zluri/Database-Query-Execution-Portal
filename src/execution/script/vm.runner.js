@@ -94,6 +94,11 @@ module.exports = async function runUserScript({
     }
 
     // Execute the user function with single timeout protection
+    /*Stops:
+	•	infinite async awaits
+	•	hanging DB calls
+	•	never-resolving promises
+*/
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => {
         reject(new Error('Function execution timeout'));
@@ -122,7 +127,7 @@ module.exports = async function runUserScript({
       error.message.includes('Constructor access blocked') ||
       error.message.includes('dangerous')
     )) {
-      throw new Error('Script attempted to access restricted functionality');
+      throw new Error('Script attempted to access restricted functionality'); //sanitizing the error
     }
     
     // Allow other errors (like legitimate script errors) to pass through

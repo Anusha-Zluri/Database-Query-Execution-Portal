@@ -80,6 +80,8 @@ router.post('/login', validate(loginSchema, 'body'), authController.login);
  *     summary: Get current user
  *     description: Retrieve information about the currently authenticated user
  *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: User information retrieved successfully
@@ -132,6 +134,8 @@ router.get('/me', authMiddleware, authController.me);
  *     summary: User logout
  *     description: Invalidate the current JWT token and log out the user
  *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Logout successful
