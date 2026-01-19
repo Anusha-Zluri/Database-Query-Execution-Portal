@@ -26,10 +26,6 @@ function newSubmissionMessage(data) {
         fields: [
           {
             type: 'mrkdwn',
-            text: `*Request ID:*\n#${requestId}`
-          },
-          {
-            type: 'mrkdwn',
             text: `*Requester:*\n${requesterEmail}`
           },
           {
@@ -63,7 +59,7 @@ function newSubmissionMessage(data) {
         ]
       }
     ],
-    text: `New request #${requestId} from ${requesterEmail}`
+    text: `New request from ${requesterEmail}`
   };
 }
 
@@ -89,10 +85,6 @@ function approvalSuccessMessage(data) {
         fields: [
           {
             type: 'mrkdwn',
-            text: `*Request ID:*\n#${requestId}`
-          },
-          {
-            type: 'mrkdwn',
             text: `*Requester:*\n${requesterEmail}`
           },
           {
@@ -102,6 +94,10 @@ function approvalSuccessMessage(data) {
           {
             type: 'mrkdwn',
             text: `*Execution Time:*\n${executionTime}ms`
+          },
+          {
+            type: 'mrkdwn',
+            text: `*Rows:*\n${rowCount}`
           }
         ]
       },
@@ -109,11 +105,11 @@ function approvalSuccessMessage(data) {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*Results:*\n${rowCount} rows returned\n${slackService.formatCode(resultPreview, 400)}`
+          text: `*Result Preview:*\n${slackService.formatCode(resultPreview, 400)}`
         }
       }
     ],
-    text: `Request #${requestId} executed successfully`
+    text: `Request executed successfully for ${requesterEmail}`
   };
 }
 
@@ -139,10 +135,6 @@ function approvalFailureMessage(data) {
         fields: [
           {
             type: 'mrkdwn',
-            text: `*Request ID:*\n#${requestId}`
-          },
-          {
-            type: 'mrkdwn',
             text: `*Requester:*\n${requesterEmail}`
           },
           {
@@ -166,7 +158,7 @@ function approvalFailureMessage(data) {
         }
       }] : [])
     ],
-    text: `Request #${requestId} execution failed`
+    text: `Request execution failed for ${requesterEmail}`
   };
 }
 
@@ -196,10 +188,6 @@ function rejectionMessage(data) {
         fields: [
           {
             type: 'mrkdwn',
-            text: `*Request ID:*\n#${requestId}`
-          },
-          {
-            type: 'mrkdwn',
             text: `*Database:*\n${database}`
           }
         ]
@@ -219,7 +207,7 @@ function rejectionMessage(data) {
         }
       }
     ],
-    text: `Your request #${requestId} was rejected`
+    text: `Your request was rejected`
   };
 }
 
