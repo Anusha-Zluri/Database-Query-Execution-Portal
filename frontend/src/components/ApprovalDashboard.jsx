@@ -669,7 +669,6 @@ export default function ApprovalDashboard() {
                   <h3 className="text-lg font-semibold text-slate-900">
                     {viewModal.type === "SCRIPT" ? "Script Content" : "Query Content"}
                   </h3>
-                  <p className="text-sm text-slate-500">Request ID: {viewModal.id}</p>
                 </div>
               </div>
               <button
@@ -766,28 +765,23 @@ export default function ApprovalDashboard() {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50">
-              <p className="text-sm text-slate-600">
-                {viewModal.type === "SCRIPT" ? "JavaScript file" : "SQL/MongoDB query"}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(viewModal.content);
-                    setCopySuccess(true);
-                    setTimeout(() => setCopySuccess(false), 2000);
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-                >
-                  {copySuccess ? "✓ Copied!" : "Copy"}
-                </button>
-                <button
-                  onClick={closeModal}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-[#1a9d7c] to-[#14b8a6] rounded-lg hover:shadow-md transition-all"
-                >
-                  Close
-                </button>
-              </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-200 bg-slate-50">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(viewModal.content);
+                  setCopySuccess(true);
+                  setTimeout(() => setCopySuccess(false), 2000);
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                {copySuccess ? "✓ Copied!" : "Copy"}
+              </button>
+              <button
+                onClick={closeModal}
+                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-[#1a9d7c] to-[#14b8a6] rounded-lg hover:shadow-md transition-all"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

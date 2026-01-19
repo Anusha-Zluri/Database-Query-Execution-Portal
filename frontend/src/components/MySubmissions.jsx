@@ -410,7 +410,6 @@ export default function MySubmissions({ onClone }) {
             <div className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200 px-6 py-4 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">Submission Details</h2>
-                <p className="text-sm text-slate-600 mt-0.5">Request ID: {selectedSubmission.id}</p>
               </div>
               <button
                 onClick={() => {

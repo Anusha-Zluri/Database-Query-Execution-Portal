@@ -44,6 +44,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
       font-size: 36px;
       font-weight: bold;
     }
+    .swagger-ui .info .version { color: #14b8a6 !important; font-size: 14px; margin-left: 10px; }
     .swagger-ui .info .description { color: #ffffff; }
     .swagger-ui .info p { color: #ffffff; }
     .swagger-ui .info a { color: #14b8a6; }
@@ -69,6 +70,20 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
       border: 1px solid #1e293b;
     }
     .swagger-ui .scheme-container .schemes > label { color: #ffffff; }
+    
+    /* Server selection - keep visible but style it */
+    .swagger-ui .servers > label { 
+      font-weight: bold; 
+      color: #ffffff; 
+    }
+    .swagger-ui .servers > label > select { 
+      margin-left: 10px; 
+      padding: 8px;
+      background: #0a0a0a;
+      border: 1px solid #1e293b;
+      color: #ffffff;
+      border-radius: 6px;
+    }
     
     /* Auth section */
     .swagger-ui .auth-wrapper { 
@@ -216,8 +231,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
     .swagger-ui ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 5px; }
     .swagger-ui ::-webkit-scrollbar-thumb:hover { background: #334155; }
   `,
-  customSiteTitle: '🗄️ Database Portal API Documentation',
-  customfavIcon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🗄️</text></svg>',
+  customSiteTitle: 'Database Portal API Documentation',
   swaggerOptions: {
     persistAuthorization: true,
     displayRequestDuration: true,
