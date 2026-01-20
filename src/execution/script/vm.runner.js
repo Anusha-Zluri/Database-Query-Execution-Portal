@@ -37,7 +37,7 @@ module.exports = async function runUserScript({
       if (!finished) {
         finished = true;
         worker.terminate();   // Forcefully kills the worker thread
-        reject(new Error('Script execution timeout - worker terminated'));
+        reject(new Error('Execution timeout (30s limit exceeded)'));
       }
     }, timeoutMs);
 

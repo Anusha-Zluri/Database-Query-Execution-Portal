@@ -62,6 +62,9 @@ async function executePostgresQuery(request, instance) {
   });
 
   try {
+    // CRITICAL: Set statement_timeout at session level for Neon
+    await execPool.query('SET statement_timeout = 25000');
+    
     // Query with timeout protection via statement_timeout
     const result = await execPool.query(request.query_text);
     

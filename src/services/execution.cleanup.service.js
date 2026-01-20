@@ -65,7 +65,7 @@ async function cleanupStuckExecutions() {
       UPDATE executions 
       SET 
         status = 'FAILED',
-        error_message = 'Execution timeout - system cleanup (worker may have been killed)',
+        error_message = 'Execution timeout',
         finished_at = NOW(),
         duration_ms = EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000,
         backend_pid = NULL,

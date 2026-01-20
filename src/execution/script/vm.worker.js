@@ -231,7 +231,7 @@ function callParent(message) {
     // Add timeout for async execution as well
     const executionPromise = exportedFn({ db: dbProxy, utils: utilsModule });
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Function execution timeout')), vmTimeout);
+      setTimeout(() => reject(new Error('Execution timeout')), vmTimeout);
     });
 
     // Race between execution and timeout

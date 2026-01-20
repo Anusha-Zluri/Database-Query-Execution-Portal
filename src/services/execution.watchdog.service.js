@@ -126,7 +126,7 @@ class ExecutionWatchdog {
         await executionDAL.markExecutionFailure(
           executionId,
           runningFor,
-          'Execution timeout - killed by watchdog',
+          'Execution timeout',
           null
         );
         console.log(`[Watchdog] Marked execution ${executionId} as FAILED`);

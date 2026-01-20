@@ -717,11 +717,11 @@ export default function ApprovalDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Submitted At</p>
                   <p className="text-sm font-semibold text-slate-900 mt-1">
-                    {viewModal.metadata.submitted_at ? new Date(viewModal.metadata.submitted_at).toLocaleString('en-US', {
+                    {viewModal.metadata.submitted_at ? new Date(viewModal.metadata.submitted_at).toLocaleString('en-IN', {
                       month: 'short',
                       day: 'numeric',
                       year: 'numeric',
-                      hour: 'numeric',
+                      hour: '2-digit',
                       minute: '2-digit',
                       hour12: true
                     }) : 'N/A'}

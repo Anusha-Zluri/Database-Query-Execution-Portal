@@ -165,7 +165,13 @@ export default function MySubmissions({ onClone }) {
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-IN', { 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
   };
 
   const getQueryPreview = (submission) => {
@@ -452,12 +458,13 @@ export default function MySubmissions({ onClone }) {
                 <div className="col-span-2">
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Submitted At</label>
                   <p className="text-sm text-slate-900 mt-1">
-                    {new Date(selectedSubmission.createdAt).toLocaleString('en-US', {
+                    {new Date(selectedSubmission.createdAt).toLocaleString('en-IN', {
                       month: 'short',
                       day: 'numeric',
                       year: 'numeric',
                       hour: '2-digit',
-                      minute: '2-digit'
+                      minute: '2-digit',
+                      hour12: true
                     })}
                   </p>
                 </div>
@@ -551,12 +558,13 @@ export default function MySubmissions({ onClone }) {
                       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Started At</label>
                       <p className="text-sm text-slate-900 mt-1">
                         {selectedSubmission.execution.startedAt 
-                          ? new Date(selectedSubmission.execution.startedAt).toLocaleString('en-US', {
+                          ? new Date(selectedSubmission.execution.startedAt).toLocaleString('en-IN', {
                               month: 'short',
                               day: 'numeric',
                               hour: '2-digit',
                               minute: '2-digit',
-                              second: '2-digit'
+                              second: '2-digit',
+                              hour12: true
                             })
                           : "N/A"}
                       </p>
@@ -565,12 +573,13 @@ export default function MySubmissions({ onClone }) {
                       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Finished At</label>
                       <p className="text-sm text-slate-900 mt-1">
                         {selectedSubmission.execution.finishedAt 
-                          ? new Date(selectedSubmission.execution.finishedAt).toLocaleString('en-US', {
+                          ? new Date(selectedSubmission.execution.finishedAt).toLocaleString('en-IN', {
                               month: 'short',
                               day: 'numeric',
                               hour: '2-digit',
                               minute: '2-digit',
-                              second: '2-digit'
+                              second: '2-digit',
+                              hour12: true
                             })
                           : "N/A"}
                       </p>
