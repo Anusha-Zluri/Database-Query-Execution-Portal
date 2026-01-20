@@ -17,9 +17,14 @@ const executionRateLimiter = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in headers
   legacyHeaders: false,
-  // Use user ID if authenticated, otherwise IP
+  // Use user ID if authenticated, otherwise use default IP handling
   keyGenerator: (req) => {
-    return req.user?.id?.toString() || req.ip;
+    // If user is authenticated, use their ID
+    if (req.user?.id) {
+      return `user_${req.user.id}`;
+    }
+    // Otherwise, let express-rate-limit handle IP (supports IPv6)
+    return undefined;
   },
   // Skip rate limiting for health checks
   skip: (req) => {
