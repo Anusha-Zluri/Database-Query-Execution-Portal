@@ -40,12 +40,12 @@ async function getPendingApprovals(managerId, filters = {}) {
   }
 
   if (filters.from) {
-    conditions.push(`r.created_at >= $${idx++}`);
+    conditions.push(`r.created_at >= $${idx++}::date`);
     params.push(filters.from);
   }
 
   if (filters.to) {
-    conditions.push(`r.created_at <= $${idx++}`);
+    conditions.push(`r.created_at < ($${idx++}::date + INTERVAL '1 day')`);
     params.push(filters.to);
   }
 

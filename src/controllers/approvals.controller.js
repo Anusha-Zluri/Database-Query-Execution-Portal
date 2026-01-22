@@ -42,7 +42,7 @@ exports.getPendingApprovals = async (req, res) => {
             });
           } else {
             return res.status(403).json({ 
-              message: `You can only approve requests from PODs you manage. POD '${pod}' is not assigned to you.` 
+              message: `You can only approve requests from PODs you manage.` 
             });
           }
         }
@@ -55,7 +55,7 @@ exports.getPendingApprovals = async (req, res) => {
         if (!podMatch) {
           // Check if POD exists at all
           const allPods = await podsDAL.getActivePods();
-          const podExistsGlobally = allPods.some(p => String(p.id) === String(pod_id));
+          const podExistsGlobally = allPods.find(p => String(p.id) === String(pod_id));
           
           if (!podExistsGlobally) {
             return res.status(404).json({ 
@@ -63,7 +63,7 @@ exports.getPendingApprovals = async (req, res) => {
             });
           } else {
             return res.status(403).json({ 
-              message: `You can only approve requests from PODs you manage. POD ID ${pod_id} is not assigned to you.` 
+              message: `You can only approve requests from PODs you manage.` 
             });
           }
         }

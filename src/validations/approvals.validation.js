@@ -25,8 +25,8 @@ const getApprovalsQuerySchema = z.object({
     .refine(val => val > 0, 'POD ID must be greater than 0')
     .optional(),
   search: z.string().max(500, 'Search query too long').optional(),
-  dateFrom: z.string().datetime({ message: 'Invalid date format for dateFrom' }).optional(),
-  dateTo: z.string().datetime({ message: 'Invalid date format for dateTo' }).optional()
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format for dateFrom (YYYY-MM-DD)').optional(),
+  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format for dateTo (YYYY-MM-DD)').optional()
 }).refine(
   (data) => {
     // If both dates provided, dateFrom must be before dateTo
