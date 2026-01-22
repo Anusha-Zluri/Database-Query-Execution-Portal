@@ -487,11 +487,13 @@ export default function ApprovalDashboard() {
                           {approval.comments && approval.comments.length > 80 ? (
                             <>
                               {expandedComments.has(approval.id) ? (
-                                <div className="whitespace-pre-wrap">
-                                  {approval.comments}
+                                <div className="max-h-24 overflow-y-auto bg-slate-50 rounded-md p-2 border">
+                                  <div className="whitespace-pre-wrap text-xs">
+                                    {approval.comments}
+                                  </div>
                                   <button
                                     onClick={() => toggleComment(approval.id)}
-                                    className="block mt-1 text-[#1a9d7c] hover:text-[#14b8a6] font-medium text-xs"
+                                    className="block mt-2 text-[#1a9d7c] hover:text-[#14b8a6] font-medium text-xs"
                                   >
                                     Show less
                                   </button>

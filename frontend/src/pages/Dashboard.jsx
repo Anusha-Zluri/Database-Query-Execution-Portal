@@ -64,9 +64,9 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-black flex">
       {/* Sidebar */}
-      <aside className={`${sidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300`}>
+      <aside className={`${sidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 fixed left-0 top-0 h-screen z-30`}>
         {/* Logo */}
-        <div className="p-6 border-b border-slate-800">
+        <div className="p-6 border-b border-slate-800 flex-shrink-0">
           {!sidebarCollapsed ? (
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#1a9d7c] to-[#14b8a6] flex items-center justify-center">
@@ -88,7 +88,7 @@ export default function Dashboard() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <button
             onClick={() => setActiveTab("submit")}
             className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-4 py-3 rounded-lg transition-all ${
@@ -140,7 +140,7 @@ export default function Dashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col">
+      <main className={`flex-1 flex flex-col ${sidebarCollapsed ? 'ml-20' : 'ml-64'} transition-all duration-300`}>
         {/* Header */}
         <header className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200 px-8 py-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-4">
